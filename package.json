@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "/big :emoji: 로 커스텀 이모지를 본인 이름으로 크게 올리는 Slack 앱",
+  "license": "MIT",
   "type": "module",
   "main": "src/app.js",
   "engines": {
