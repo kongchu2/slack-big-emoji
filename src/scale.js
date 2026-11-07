@@ -60,6 +60,7 @@ export function createScaler({ dir, publicUrl }) {
 
   async function serve(req, res) {
     const file = req.params?.file ?? '';
+    console.info(`[img] ${req.method} ${req.url} ${req.headers?.['user-agent'] ?? '-'}`);
     if (!FILE_PATTERN.test(file)) {
       res.writeHead(404);
       return res.end();

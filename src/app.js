@@ -198,7 +198,7 @@ async function handleCommand(cmd, ack, respond, scale, asFiles = false) {
   const note = problems.join('\n');
   if (!emojis.length) return respond({ response_type: 'ephemeral', text: note });
 
-  const askToConnect = (lead) => {
+  const askToConnect = (lead, sendAsFiles = asFiles) => {
     if (!oauthEnabled) {
       return respond({ response_type: 'ephemeral', text: `${lead} 아직 연결 기능이 꺼져 있습니다. 앱 관리자에게 문의해 주세요.` });
     }
@@ -207,7 +207,7 @@ async function handleCommand(cmd, ack, respond, scale, asFiles = false) {
       user: cmd.user_id,
       channel: cmd.channel_id,
       emojis,
-      asFiles,
+      asFiles: sendAsFiles,
       responseUrl: cmd.response_url,
     });
     const text = `${lead} 연결하면 ${label(emojis)} 이 바로 올라갑니다.${note ? `\n${note}` : ''}`;
@@ -246,13 +246,34 @@ async function handleCommand(cmd, ack, respond, scale, asFiles = false) {
     }
     // Slack 이 image_url 을 받아 오지 못하면 invalid_blocks 를 준다. 이유는 response_metadata 에 있다.
     if (code === 'invalid_blocks' && !asFiles) {
-      app.logger.warn('이미지 블록 거절, 첨부 파일로 다시 올림', label(emojis), error.data?.response_metadata?.messages);
+      app.logger.warn('이미지 블록 거절', label(emojis), error.data?.response_metadata?.messages);
+      // 키운 이미지는 막 만든 직후 Slack 이 가져가다 실패하면 그 URL 을 계속 실패로 기억한다.
+      // 잠깐 기다렸다가 쿼리만 바꾼 URL 로 한 번 더 시도한다.
+      if (scale > 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        const fresh = emojis.map((emoji) => ({ ...emoji, url: `${emoji.url}?r=${Date.now()}` }));
+        try {
+          await deliver(userToken, cmd.channel_id, fresh, false);
+          if (note) await respond({ response_type: 'ephemeral', text: note });
+          app.logger.info('새 URL 로 다시 올림', label(emojis));
+          return;
+        } catch (retryError) {
+          app.logger.warn('새 URL 로도 실패, 첨부 파일로 다시 올림', retryError.data?.error ?? retryError);
+        }
+      }
       try {
         await deliver(userToken, cmd.channel_id, emojis, true);
         if (note) await respond({ response_type: 'ephemeral', text: note });
         return;
       } catch (retryError) {
-        app.logger.error('첨부 파일로 다시 올리기도 실패', retryError.data?.error ?? retryError);
+        const retryCode = retryError.data?.error;
+        // files:write 이전에 연결한 사람은 missing_scope 가 난다. 다시 연결하면 첨부 파일로 올라간다.
+        if (REVOKED.has(retryCode)) {
+          await tokens.remove(cmd.team_id, cmd.user_id);
+          return askToConnect('이 이모지는 첨부 파일로 올려야 해서 한 번 더 연결해야 합니다.', true);
+        }
+        app.logger.error('첨부 파일로 다시 올리기도 실패', retryCode ?? retryError);
+        return respond({ response_type: 'ephemeral', text: `올리지 못했습니다 (invalid_blocks → ${retryCode ?? retryError.message}).` });
       }
     }
     app.logger.error('올리기 실패', code ?? error, error.data?.response_metadata?.messages ?? '');
