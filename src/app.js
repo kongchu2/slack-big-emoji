@@ -3,14 +3,7 @@ import { createEmojiCache, parseEmojiName } from './emoji.js';
 import { createState, readState } from './state.js';
 import { createTokenStore } from './tokens.js';
 
-const required = [
-  'SLACK_BOT_TOKEN',
-  'SLACK_APP_TOKEN',
-  'SLACK_CLIENT_ID',
-  'SLACK_CLIENT_SECRET',
-  'STATE_SECRET',
-  'PUBLIC_URL',
-];
+const required = ['SLACK_BOT_TOKEN', 'SLACK_APP_TOKEN'];
 const missing = required.filter((name) => !process.env[name]);
 if (missing.length) {
   console.error(`환경 변수가 비어 있습니다: ${missing.join(', ')}`);
@@ -19,7 +12,8 @@ if (missing.length) {
 
 const env = process.env;
 const command = env.SLASH_COMMAND ?? '/big';
-const redirectUri = `${env.PUBLIC_URL.replace(/\/$/, '')}/slack/oauth/callback`;
+const oauthEnabled = Boolean(env.SLACK_CLIENT_ID && env.SLACK_CLIENT_SECRET && env.STATE_SECRET && env.PUBLIC_URL);
+const redirectUri = oauthEnabled ? `${env.PUBLIC_URL.replace(/\/$/, '')}/slack/oauth/callback` : null;
 const tokens = await createTokenStore(env.TOKEN_FILE ?? 'data/tokens.json');
 
 const REVOKED = new Set(['invalid_auth', 'token_revoked', 'account_inactive', 'not_authed', 'missing_scope']);
@@ -95,7 +89,7 @@ const app = new App({
   socketMode: true,
   logLevel: env.LOG_LEVEL ?? LogLevel.INFO,
   installerOptions: { port: Number(env.PORT ?? 3000) },
-  customRoutes: [{ path: '/slack/oauth/callback', method: ['GET'], handler: handleCallback }],
+  customRoutes: oauthEnabled ? [{ path: '/slack/oauth/callback', method: ['GET'], handler: handleCallback }] : [],
 });
 
 const lookupEmoji = createEmojiCache(app.client);
@@ -117,6 +111,9 @@ app.command(command, async ({ command: cmd, ack, respond }) => {
   }
 
   const askToConnect = (lead) => {
+    if (!oauthEnabled) {
+      return respond({ response_type: 'ephemeral', text: `${lead} 아직 연결 기능이 꺼져 있습니다. 앱 관리자에게 문의해 주세요.` });
+    }
     const state = createState(env.STATE_SECRET, {
       team: cmd.team_id,
       user: cmd.user_id,
@@ -147,4 +144,4 @@ app.command(command, async ({ command: cmd, ack, respond }) => {
 });
 
 await app.start();
-app.logger.info(`${command} 준비됨. OAuth 콜백: ${redirectUri}`);
+app.logger.info(`${command} 준비됨. ${oauthEnabled ? `OAuth 콜백: ${redirectUri}` : 'OAuth 꺼짐 (SLACK_CLIENT_SECRET, STATE_SECRET, PUBLIC_URL 필요)'}`);
