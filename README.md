@@ -4,6 +4,8 @@
 
 `/big :emoji_1: :emoji_2:` 처럼 한 번에 5개까지 올릴 수 있습니다. 이미지는 위아래로 쌓이고, 찾지 못한 이모지는 본인에게만 보이는 메시지로 알려 줍니다. `:a::b:` 나 `a, b` 처럼 붙이거나 쉼표로 나눠도 됩니다.
 
+`/bigs :emoji_1: :emoji_2:` 는 이모지를 첨부 파일로 올려서 옆으로 나란히 보이게 합니다. 사용자 권한 `files:write` 가 필요해서, 그 전에 연결한 사람은 처음 `/bigs` 를 쓸 때 한 번 더 연결합니다.
+
 ## 동작
 
 1. `/big :이모지:`를 입력하면 앱이 `emoji.list`에서 이미지 URL을 찾습니다. 별칭(alias)도 따라갑니다.
@@ -45,6 +47,7 @@ npm start
 | `PORT` | 콜백 HTTP 서버 포트 (기본 3000) |
 | `SLASH_COMMAND` | 커맨드 이름 (기본 `/big`, manifest와 같아야 함) |
 | `MEGA_COMMAND` | 두 배 커맨드 이름 (기본 `/mega`, manifest와 같아야 함) |
+| `FILES_COMMAND` | 첨부 파일로 나란히 올리는 커맨드 이름 (기본 `/bigs`, manifest와 같아야 함) |
 | `TOKEN_FILE` | 사용자 토큰 저장 위치 (기본 `data/tokens.json`) |
 | `IMAGE_DIR` | 키운 이미지 저장 위치 (기본 `data/img`) |
 

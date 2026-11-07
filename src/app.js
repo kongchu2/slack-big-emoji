@@ -14,10 +14,12 @@ if (missing.length) {
 const env = process.env;
 const command = env.SLASH_COMMAND?.trim() || '/big';
 const megaCommand = env.MEGA_COMMAND?.trim() || '/mega';
-if (command === megaCommand) {
-  console.error(`SLASH_COMMAND 와 MEGA_COMMAND 가 같습니다 (${command}). 서로 다른 이름을 써 주세요.`);
+const filesCommand = env.FILES_COMMAND?.trim() || '/bigs';
+if (new Set([command, megaCommand, filesCommand]).size < 3) {
+  console.error(`SLASH_COMMAND, MEGA_COMMAND, FILES_COMMAND 는 서로 달라야 합니다 (${command}, ${megaCommand}, ${filesCommand}).`);
   process.exit(1);
 }
+const MAX_FILE_BYTES = 4 * 1024 * 1024;
 const oauthEnabled = Boolean(env.SLACK_CLIENT_ID && env.SLACK_CLIENT_SECRET && env.STATE_SECRET && env.PUBLIC_URL);
 const redirectUri = oauthEnabled ? `${env.PUBLIC_URL.replace(/\/$/, '')}/slack/oauth/callback` : null;
 const tokens = await createTokenStore(env.TOKEN_FILE ?? 'data/tokens.json');
@@ -29,7 +31,7 @@ const REVOKED = new Set(['invalid_auth', 'token_revoked', 'account_inactive', 'n
 function authorizeUrl(state) {
   const url = new URL('https://slack.com/oauth/v2/authorize');
   url.searchParams.set('client_id', env.SLACK_CLIENT_ID);
-  url.searchParams.set('user_scope', 'chat:write');
+  url.searchParams.set('user_scope', 'chat:write,files:write');
   url.searchParams.set('redirect_uri', redirectUri);
   url.searchParams.set('state', state);
   return url.toString();
@@ -42,6 +44,22 @@ function emojiBlocks(emojis) {
     text: label(emojis),
     blocks: emojis.map((emoji) => ({ type: 'image', image_url: emoji.url, alt_text: `:${emoji.name}:` })),
   };
+}
+
+async function emojiFile(emoji) {
+  const response = await fetch(emoji.url);
+  if (!response.ok) throw new Error(`:${emoji.name}: 이미지를 받지 못했습니다 (${response.status})`);
+  const file = Buffer.from(await response.arrayBuffer());
+  if (file.length > MAX_FILE_BYTES) throw new Error(`:${emoji.name}: 이미지가 너무 큽니다`);
+  const ext = new URL(emoji.url).pathname.match(/\.(\w+)$/)?.[1] ?? 'png';
+  return { file, filename: `${emoji.name}.${ext}`, title: `:${emoji.name}:` };
+}
+
+// asFiles 면 이미지 블록 대신 첨부 파일로 올린다. 파일 여러 개는 Slack 이 옆으로 나란히 보여 준다.
+async function deliver(token, channel, emojis, asFiles) {
+  if (!asFiles) return app.client.chat.postMessage({ token, channel, ...emojiBlocks(emojis) });
+  const file_uploads = await Promise.all(emojis.map(emojiFile));
+  return app.client.filesUploadV2({ token, channel_id: channel, file_uploads });
 }
 
 function page(res, status, message) {
@@ -89,15 +107,11 @@ async function handleCallback(req, res) {
   }
 
   try {
-    await app.client.chat.postMessage({
-      token: user.access_token,
-      channel: state.channel,
-      ...emojiBlocks(state.emojis),
-    });
+    await deliver(user.access_token, state.channel, state.emojis, state.asFiles);
     return page(res, 200, `연결했고 ${label(state.emojis)} 을 올렸습니다. 이 창은 닫아도 됩니다.`);
   } catch (error) {
     app.logger.warn('연결 직후 올리기 실패', error.data?.error ?? error);
-    return page(res, 200, `연결했습니다. 슬랙으로 돌아가 <code>${command}</code> 를 다시 입력해 주세요.`);
+    return page(res, 200, `연결했습니다. 슬랙으로 돌아가 명령어를 다시 입력해 주세요.`);
   }
 }
 
@@ -117,8 +131,9 @@ const lookupEmoji = createEmojiCache(app.client);
 
 app.command(command, ({ command: cmd, ack, respond }) => handleCommand(cmd, ack, respond, 1));
 app.command(megaCommand, ({ command: cmd, ack, respond }) => handleCommand(cmd, ack, respond, 2));
+app.command(filesCommand, ({ command: cmd, ack, respond }) => handleCommand(cmd, ack, respond, 1, true));
 
-async function handleCommand(cmd, ack, respond, scale) {
+async function handleCommand(cmd, ack, respond, scale, asFiles = false) {
   await ack();
 
   const names = parseEmojiNames(cmd.text ?? '');
@@ -187,6 +202,7 @@ async function handleCommand(cmd, ack, respond, scale) {
       user: cmd.user_id,
       channel: cmd.channel_id,
       emojis,
+      asFiles,
       responseUrl: cmd.response_url,
     });
     const text = `${lead} 연결하면 ${label(emojis)} 이 바로 올라갑니다.${note ? `\n${note}` : ''}`;
@@ -215,7 +231,7 @@ async function handleCommand(cmd, ack, respond, scale) {
   if (!userToken) return askToConnect('본인 이름으로 올리려면 한 번 연결해야 합니다.');
 
   try {
-    await app.client.chat.postMessage({ token: userToken, channel: cmd.channel_id, ...emojiBlocks(emojis) });
+    await deliver(userToken, cmd.channel_id, emojis, asFiles);
     if (note) await respond({ response_type: 'ephemeral', text: note });
   } catch (error) {
     const code = error.data?.error;
@@ -223,7 +239,7 @@ async function handleCommand(cmd, ack, respond, scale) {
       await tokens.remove(cmd.team_id, cmd.user_id);
       return askToConnect('연결이 끊겼습니다.');
     }
-    app.logger.error('chat.postMessage 실패', code ?? error);
+    app.logger.error('올리기 실패', code ?? error);
     return respond({ response_type: 'ephemeral', text: `올리지 못했습니다 (${code ?? '알 수 없는 오류'}).` });
   }
 }
@@ -233,4 +249,4 @@ app.action(CONNECT_ACTION, async ({ ack }) => {
 });
 
 await app.start();
-app.logger.info(`${command}, ${megaCommand} 준비됨. ${oauthEnabled ? `OAuth 콜백: ${redirectUri}` : 'OAuth 꺼짐 (SLACK_CLIENT_SECRET, STATE_SECRET, PUBLIC_URL 필요)'}`);
+app.logger.info(`${command}, ${megaCommand}, ${filesCommand} 준비됨. ${oauthEnabled ? `OAuth 콜백: ${redirectUri}` : 'OAuth 꺼짐 (SLACK_CLIENT_SECRET, STATE_SECRET, PUBLIC_URL 필요)'}`);
