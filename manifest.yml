@@ -8,7 +8,7 @@ features:
   slash_commands:
     - command: /big
       description: 커스텀 이모지를 크게 올립니다
-      usage_hint: ":party_parrot: [x2]"
+      usage_hint: ":party_parrot:"
       should_escape: false
     - command: /mega
       description: 커스텀 이모지를 두 배로 크게 올립니다

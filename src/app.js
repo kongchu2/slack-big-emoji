@@ -1,5 +1,5 @@
 import { App, LogLevel } from '@slack/bolt';
-import { createEmojiCache, parseCommand } from './emoji.js';
+import { createEmojiCache, parseEmojiName } from './emoji.js';
 import { createScaler } from './scale.js';
 import { createState, readState } from './state.js';
 import { createTokenStore } from './tokens.js';
@@ -113,18 +113,16 @@ const megaCommand = env.MEGA_COMMAND ?? '/mega';
 app.command(command, ({ command: cmd, ack, respond }) => handleCommand(cmd, ack, respond, 1));
 app.command(megaCommand, ({ command: cmd, ack, respond }) => handleCommand(cmd, ack, respond, 2));
 
-async function handleCommand(cmd, ack, respond, minScale) {
+async function handleCommand(cmd, ack, respond, scale) {
   await ack();
 
-  const parsed = parseCommand(cmd.text ?? '');
-  if (!parsed) {
+  const name = parseEmojiName(cmd.text ?? '');
+  if (!name) {
     return respond({
       response_type: 'ephemeral',
       text: `사용법: \`${command} :이모지이름:\`, 두 배로 크게: \`${megaCommand} :이모지이름:\``,
     });
   }
-  const { name } = parsed;
-  const scale = Math.max(parsed.scale, minScale);
 
   const found = await lookupEmoji(name);
   if (!found) {

@@ -19,13 +19,3 @@ test('resolveEmoji follows aliases', () => {
   assert.equal(resolveEmoji(list, 'nope'), null);
 });
 
-test('parseCommand reads an optional x2', async () => {
-  const { parseCommand } = await import('../src/emoji.js');
-  assert.deepEqual(parseCommand(':parrot:'), { name: 'parrot', scale: 1 });
-  assert.deepEqual(parseCommand(':parrot: x2'), { name: 'parrot', scale: 2 });
-  assert.deepEqual(parseCommand('2X :parrot:'), { name: 'parrot', scale: 2 });
-  assert.deepEqual(parseCommand(':고양이콘_윙크: x2'), { name: '고양이콘_윙크', scale: 2 });
-  assert.equal(parseCommand('x2'), null);
-  assert.equal(parseCommand(':a: :b:'), null);
-  assert.equal(parseCommand(':a: x3'), null);
-});
