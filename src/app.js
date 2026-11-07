@@ -220,7 +220,7 @@ async function handleCommand(cmd, ack, respond, asFiles = false) {
       await tokens.remove(cmd.team_id, cmd.user_id);
       return askToConnect('연결이 끊겼습니다.');
     }
-    app.logger.error('올리기 실패', code ?? error);
+    app.logger.error('올리기 실패', code ?? error, error.data?.response_metadata?.messages ?? '');
     return respond({ response_type: 'ephemeral', text: `올리지 못했습니다 (${code ?? '알 수 없는 오류'}).` });
   }
 }
