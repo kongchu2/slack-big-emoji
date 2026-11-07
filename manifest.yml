@@ -10,10 +10,6 @@ features:
       description: 커스텀 이모지를 크게 올립니다
       usage_hint: ":party_parrot:"
       should_escape: false
-    - command: /mega
-      description: 커스텀 이모지를 두 배로 크게 올립니다
-      usage_hint: ":party_parrot:"
-      should_escape: false
     - command: /bigs
       description: 커스텀 이모지 여러 개를 첨부 파일로 나란히 올립니다
       usage_hint: ":emoji_1: :emoji_2:"

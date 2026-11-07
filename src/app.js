@@ -1,6 +1,5 @@
 import { App, LogLevel } from '@slack/bolt';
 import { MAX_EMOJIS, createEmojiCache, parseEmojiNames } from './emoji.js';
-import { createScaler } from './scale.js';
 import { createState, readState } from './state.js';
 import { createTokenStore } from './tokens.js';
 
@@ -13,17 +12,15 @@ if (missing.length) {
 
 const env = process.env;
 const command = env.SLASH_COMMAND?.trim() || '/big';
-const megaCommand = env.MEGA_COMMAND?.trim() || '/mega';
 const filesCommand = env.FILES_COMMAND?.trim() || '/bigs';
-if (new Set([command, megaCommand, filesCommand]).size < 3) {
-  console.error(`SLASH_COMMAND, MEGA_COMMAND, FILES_COMMAND 는 서로 달라야 합니다 (${command}, ${megaCommand}, ${filesCommand}).`);
+if (command === filesCommand) {
+  console.error(`SLASH_COMMAND 와 FILES_COMMAND 는 서로 달라야 합니다 (${command}).`);
   process.exit(1);
 }
 const MAX_FILE_BYTES = 4 * 1024 * 1024;
 const oauthEnabled = Boolean(env.SLACK_CLIENT_ID && env.SLACK_CLIENT_SECRET && env.STATE_SECRET && env.PUBLIC_URL);
 const redirectUri = oauthEnabled ? `${env.PUBLIC_URL.replace(/\/$/, '')}/slack/oauth/callback` : null;
 const tokens = await createTokenStore(env.TOKEN_FILE ?? 'data/tokens.json');
-const scaler = env.PUBLIC_URL ? createScaler({ dir: env.IMAGE_DIR ?? 'data/img', publicUrl: env.PUBLIC_URL }) : null;
 const CONNECT_ACTION = 'connect';
 
 const REVOKED = new Set(['invalid_auth', 'token_revoked', 'account_inactive', 'not_authed', 'missing_scope']);
@@ -123,26 +120,24 @@ const app = new App({
   installerOptions: { port: Number(env.PORT ?? 3000) },
   customRoutes: [
     ...(oauthEnabled ? [{ path: '/slack/oauth/callback', method: ['GET'], handler: handleCallback }] : []),
-    ...(scaler ? [{ path: '/img/:file', method: ['GET'], handler: (req, res) => scaler.serve(req, res) }] : []),
   ],
 });
 
 const lookupEmoji = createEmojiCache(app.client);
 
-app.command(command, ({ command: cmd, ack, respond }) => handleCommand(cmd, ack, respond, 1));
-app.command(megaCommand, ({ command: cmd, ack, respond }) => handleCommand(cmd, ack, respond, 2));
-app.command(filesCommand, ({ command: cmd, ack, respond }) => handleCommand(cmd, ack, respond, 1, true));
+app.command(command, ({ command: cmd, ack, respond }) => handleCommand(cmd, ack, respond));
+app.command(filesCommand, ({ command: cmd, ack, respond }) => handleCommand(cmd, ack, respond, true));
 
-async function handleCommand(cmd, ack, respond, scale, asFiles = false) {
+async function handleCommand(cmd, ack, respond, asFiles = false) {
   await ack();
 
-  // 여러 개는 asFiles 커맨드(/bigs)만 받는다. /big, /mega 는 하나씩.
+  // 여러 개는 asFiles 커맨드(/bigs)만 받는다. /big 은 하나씩.
   const max = asFiles ? MAX_EMOJIS : 1;
   const names = parseEmojiNames(cmd.text ?? '');
   if (!names) {
     return respond({
       response_type: 'ephemeral',
-      text: `사용법: \`${command} :이모지이름:\`, 두 배로 크게: \`${megaCommand} :이모지이름:\`, 여러 개 나란히: \`${filesCommand} :이모지1: :이모지2:\` (${MAX_EMOJIS}개까지)`,
+      text: `사용법: \`${command} :이모지이름:\`, 여러 개 나란히: \`${filesCommand} :이모지1: :이모지2:\` (${MAX_EMOJIS}개까지)`,
     });
   }
   if (names.length > max) {
@@ -159,9 +154,6 @@ async function handleCommand(cmd, ack, respond, scale, asFiles = false) {
       text: '본인 이름으로 올리려면 한 번 연결해야 합니다. 아직 연결 기능이 꺼져 있습니다. 앱 관리자에게 문의해 주세요.',
     });
   }
-  if (scale > 1 && !scaler) {
-    return respond({ response_type: 'ephemeral', text: '크게 키우기는 아직 꺼져 있습니다. 앱 관리자에게 문의해 주세요.' });
-  }
 
   let found;
   try {
@@ -177,28 +169,12 @@ async function handleCommand(cmd, ack, respond, scale, asFiles = false) {
     problems.push(`${missing.map((name) => `:${name}:`).join(' ')} 을 찾지 못했습니다. 워크스페이스에 추가된 커스텀 이모지만 쓸 수 있습니다.`);
   }
 
-  let emojis = found.filter(Boolean);
-  if (scale > 1 && emojis.length) {
-    const scaled = await Promise.all(
-      emojis.map((emoji) =>
-        scaler.scaledUrl(emoji, scale).then(
-          (url) => ({ name: emoji.name, url }),
-          (error) => {
-            app.logger.error('이모지 키우기 실패', emoji.name, error);
-            return null;
-          },
-        ),
-      ),
-    );
-    const failed = emojis.filter((_, i) => !scaled[i]);
-    if (failed.length) problems.push(`${label(failed)} 을 키우지 못했습니다.`);
-    emojis = scaled.filter(Boolean);
-  }
+  const emojis = found.filter(Boolean);
 
   const note = problems.join('\n');
   if (!emojis.length) return respond({ response_type: 'ephemeral', text: note });
 
-  const askToConnect = (lead, sendAsFiles = asFiles) => {
+  const askToConnect = (lead) => {
     if (!oauthEnabled) {
       return respond({ response_type: 'ephemeral', text: `${lead} 아직 연결 기능이 꺼져 있습니다. 앱 관리자에게 문의해 주세요.` });
     }
@@ -207,7 +183,7 @@ async function handleCommand(cmd, ack, respond, scale, asFiles = false) {
       user: cmd.user_id,
       channel: cmd.channel_id,
       emojis,
-      asFiles: sendAsFiles,
+      asFiles,
       responseUrl: cmd.response_url,
     });
     const text = `${lead} 연결하면 ${label(emojis)} 이 바로 올라갑니다.${note ? `\n${note}` : ''}`;
@@ -244,39 +220,7 @@ async function handleCommand(cmd, ack, respond, scale, asFiles = false) {
       await tokens.remove(cmd.team_id, cmd.user_id);
       return askToConnect('연결이 끊겼습니다.');
     }
-    // Slack 이 image_url 을 받아 오지 못하면 invalid_blocks 를 준다. 이유는 response_metadata 에 있다.
-    if (code === 'invalid_blocks' && !asFiles) {
-      app.logger.warn('이미지 블록 거절', label(emojis), error.data?.response_metadata?.messages);
-      // 키운 이미지는 막 만든 직후 Slack 이 가져가다 실패하면 그 URL 을 계속 실패로 기억한다.
-      // 잠깐 기다렸다가 쿼리만 바꾼 URL 로 한 번 더 시도한다.
-      if (scale > 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        const fresh = emojis.map((emoji) => ({ ...emoji, url: `${emoji.url}?r=${Date.now()}` }));
-        try {
-          await deliver(userToken, cmd.channel_id, fresh, false);
-          if (note) await respond({ response_type: 'ephemeral', text: note });
-          app.logger.info('새 URL 로 다시 올림', label(emojis));
-          return;
-        } catch (retryError) {
-          app.logger.warn('새 URL 로도 실패, 첨부 파일로 다시 올림', retryError.data?.error ?? retryError);
-        }
-      }
-      try {
-        await deliver(userToken, cmd.channel_id, emojis, true);
-        if (note) await respond({ response_type: 'ephemeral', text: note });
-        return;
-      } catch (retryError) {
-        const retryCode = retryError.data?.error;
-        // files:write 이전에 연결한 사람은 missing_scope 가 난다. 다시 연결하면 첨부 파일로 올라간다.
-        if (REVOKED.has(retryCode)) {
-          await tokens.remove(cmd.team_id, cmd.user_id);
-          return askToConnect('이 이모지는 첨부 파일로 올려야 해서 한 번 더 연결해야 합니다.', true);
-        }
-        app.logger.error('첨부 파일로 다시 올리기도 실패', retryCode ?? retryError);
-        return respond({ response_type: 'ephemeral', text: `올리지 못했습니다 (invalid_blocks → ${retryCode ?? retryError.message}).` });
-      }
-    }
-    app.logger.error('올리기 실패', code ?? error, error.data?.response_metadata?.messages ?? '');
+    app.logger.error('올리기 실패', code ?? error);
     return respond({ response_type: 'ephemeral', text: `올리지 못했습니다 (${code ?? '알 수 없는 오류'}).` });
   }
 }
@@ -286,4 +230,4 @@ app.action(CONNECT_ACTION, async ({ ack }) => {
 });
 
 await app.start();
-app.logger.info(`${command}, ${megaCommand}, ${filesCommand} 준비됨. ${oauthEnabled ? `OAuth 콜백: ${redirectUri}` : 'OAuth 꺼짐 (SLACK_CLIENT_SECRET, STATE_SECRET, PUBLIC_URL 필요)'}`);
+app.logger.info(`${command}, ${filesCommand} 준비됨. ${oauthEnabled ? `OAuth 콜백: ${redirectUri}` : 'OAuth 꺼짐 (SLACK_CLIENT_SECRET, STATE_SECRET, PUBLIC_URL 필요)'}`);
