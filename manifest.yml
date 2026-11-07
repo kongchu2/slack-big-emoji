@@ -10,6 +10,10 @@ features:
       description: 커스텀 이모지를 크게 올립니다
       usage_hint: ":party_parrot: [x2]"
       should_escape: false
+    - command: /mega
+      description: 커스텀 이모지를 두 배로 크게 올립니다
+      usage_hint: ":party_parrot:"
+      should_escape: false
 oauth_config:
   redirect_urls:
     - https://YOUR-PUBLIC-HOST/slack/oauth/callback

@@ -1,6 +1,6 @@
 # slack-big-emoji
 
-`/big :party_parrot:` 처럼 입력하면 워크스페이스의 커스텀 이모지를 **본인 이름으로** 채널에 크게 올리는 Slack 앱입니다. GIF도 움직이는 채로 올라갑니다. `/big :party_parrot: x2` 는 두 배 크기로 올립니다.
+`/big :party_parrot:` 처럼 입력하면 워크스페이스의 커스텀 이모지를 **본인 이름으로** 채널에 크게 올리는 Slack 앱입니다. GIF도 움직이는 채로 올라갑니다. `/mega :party_parrot:` (또는 `/big :party_parrot: x2`) 는 두 배 크기로 올립니다.
 
 ## 동작
 
@@ -42,6 +42,7 @@ npm start
 | `PUBLIC_URL` | 콜백(`/slack/oauth/callback`)이 열리는 HTTPS 주소 |
 | `PORT` | 콜백 HTTP 서버 포트 (기본 3000) |
 | `SLASH_COMMAND` | 커맨드 이름 (기본 `/big`, manifest와 같아야 함) |
+| `MEGA_COMMAND` | 두 배 커맨드 이름 (기본 `/mega`, manifest와 같아야 함) |
 | `TOKEN_FILE` | 사용자 토큰 저장 위치 (기본 `data/tokens.json`) |
 | `IMAGE_DIR` | 키운 이미지 저장 위치 (기본 `data/img`) |
 

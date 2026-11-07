@@ -108,17 +108,23 @@ const app = new App({
 
 const lookupEmoji = createEmojiCache(app.client);
 
-app.command(command, async ({ command: cmd, ack, respond }) => {
+const megaCommand = env.MEGA_COMMAND ?? '/mega';
+
+app.command(command, ({ command: cmd, ack, respond }) => handleCommand(cmd, ack, respond, 1));
+app.command(megaCommand, ({ command: cmd, ack, respond }) => handleCommand(cmd, ack, respond, 2));
+
+async function handleCommand(cmd, ack, respond, minScale) {
   await ack();
 
   const parsed = parseCommand(cmd.text ?? '');
   if (!parsed) {
     return respond({
       response_type: 'ephemeral',
-      text: `사용법: \`${command} :이모지이름:\`, 두 배로 크게: \`${command} :이모지이름: x2\``,
+      text: `사용법: \`${command} :이모지이름:\`, 두 배로 크게: \`${megaCommand} :이모지이름:\``,
     });
   }
-  const { name, scale } = parsed;
+  const { name } = parsed;
+  const scale = Math.max(parsed.scale, minScale);
 
   const found = await lookupEmoji(name);
   if (!found) {
@@ -190,7 +196,7 @@ app.command(command, async ({ command: cmd, ack, respond }) => {
     app.logger.error('chat.postMessage 실패', code ?? error);
     return respond({ response_type: 'ephemeral', text: `올리지 못했습니다 (${code ?? '알 수 없는 오류'}).` });
   }
-});
+}
 
 app.action(CONNECT_ACTION, async ({ ack }) => {
   await ack();
