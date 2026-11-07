@@ -1,5 +1,5 @@
 import { App, LogLevel } from '@slack/bolt';
-import { createEmojiCache, parseEmojiName } from './emoji.js';
+import { MAX_EMOJIS, createEmojiCache, parseEmojiNames } from './emoji.js';
 import { createScaler } from './scale.js';
 import { createState, readState } from './state.js';
 import { createTokenStore } from './tokens.js';
@@ -35,10 +35,12 @@ function authorizeUrl(state) {
   return url.toString();
 }
 
-function emojiBlocks(emoji) {
+const label = (emojis) => emojis.map((emoji) => `:${emoji.name}:`).join(' ');
+
+function emojiBlocks(emojis) {
   return {
-    text: `:${emoji.name}:`,
-    blocks: [{ type: 'image', image_url: emoji.url, alt_text: `:${emoji.name}:` }],
+    text: label(emojis),
+    blocks: emojis.map((emoji) => ({ type: 'image', image_url: emoji.url, alt_text: `:${emoji.name}:` })),
   };
 }
 
@@ -90,9 +92,9 @@ async function handleCallback(req, res) {
     await app.client.chat.postMessage({
       token: user.access_token,
       channel: state.channel,
-      ...emojiBlocks({ name: state.name, url: state.url }),
+      ...emojiBlocks(state.emojis),
     });
-    return page(res, 200, `연결했고 :${state.name}: 을 올렸습니다. 이 창은 닫아도 됩니다.`);
+    return page(res, 200, `연결했고 ${label(state.emojis)} 을 올렸습니다. 이 창은 닫아도 됩니다.`);
   } catch (error) {
     app.logger.warn('연결 직후 올리기 실패', error.data?.error ?? error);
     return page(res, 200, `연결했습니다. 슬랙으로 돌아가 <code>${command}</code> 를 다시 입력해 주세요.`);
@@ -119,26 +121,15 @@ app.command(megaCommand, ({ command: cmd, ack, respond }) => handleCommand(cmd, 
 async function handleCommand(cmd, ack, respond, scale) {
   await ack();
 
-  const name = parseEmojiName(cmd.text ?? '');
-  if (!name) {
+  const names = parseEmojiNames(cmd.text ?? '');
+  if (!names) {
     return respond({
       response_type: 'ephemeral',
-      text: `사용법: \`${command} :이모지이름:\`, 두 배로 크게: \`${megaCommand} :이모지이름:\``,
+      text: `사용법: \`${command} :이모지1: :이모지2:\`, 두 배로 크게: \`${megaCommand} :이모지이름:\` (한 번에 ${MAX_EMOJIS}개까지)`,
     });
   }
-
-  let found;
-  try {
-    found = await lookupEmoji(name);
-  } catch (error) {
-    app.logger.error('emoji.list 실패', error.data?.error ?? error);
-    return respond({ response_type: 'ephemeral', text: '이모지 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.' });
-  }
-  if (!found) {
-    return respond({
-      response_type: 'ephemeral',
-      text: `:${name}: 을 찾지 못했습니다. 워크스페이스에 추가된 커스텀 이모지만 쓸 수 있습니다.`,
-    });
+  if (names.length > MAX_EMOJIS) {
+    return respond({ response_type: 'ephemeral', text: `한 번에 ${MAX_EMOJIS}개까지 올릴 수 있습니다.` });
   }
 
   const userToken = tokens.get(cmd.team_id, cmd.user_id);
@@ -148,19 +139,44 @@ async function handleCommand(cmd, ack, respond, scale) {
       text: '본인 이름으로 올리려면 한 번 연결해야 합니다. 아직 연결 기능이 꺼져 있습니다. 앱 관리자에게 문의해 주세요.',
     });
   }
-
-  let emoji = found;
-  if (scale > 1) {
-    if (!scaler) {
-      return respond({ response_type: 'ephemeral', text: '크게 키우기는 아직 꺼져 있습니다. 앱 관리자에게 문의해 주세요.' });
-    }
-    try {
-      emoji = { name: found.name, url: await scaler.scaledUrl(found, scale) };
-    } catch (error) {
-      app.logger.error('이모지 키우기 실패', error);
-      return respond({ response_type: 'ephemeral', text: `:${found.name}: 을 키우지 못했습니다.` });
-    }
+  if (scale > 1 && !scaler) {
+    return respond({ response_type: 'ephemeral', text: '크게 키우기는 아직 꺼져 있습니다. 앱 관리자에게 문의해 주세요.' });
   }
+
+  let found;
+  try {
+    found = await Promise.all(names.map((name) => lookupEmoji(name)));
+  } catch (error) {
+    app.logger.error('emoji.list 실패', error.data?.error ?? error);
+    return respond({ response_type: 'ephemeral', text: '이모지 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.' });
+  }
+
+  const problems = [];
+  const missing = names.filter((_, i) => !found[i]);
+  if (missing.length) {
+    problems.push(`${missing.map((name) => `:${name}:`).join(' ')} 을 찾지 못했습니다. 워크스페이스에 추가된 커스텀 이모지만 쓸 수 있습니다.`);
+  }
+
+  let emojis = found.filter(Boolean);
+  if (scale > 1 && emojis.length) {
+    const scaled = await Promise.all(
+      emojis.map((emoji) =>
+        scaler.scaledUrl(emoji, scale).then(
+          (url) => ({ name: emoji.name, url }),
+          (error) => {
+            app.logger.error('이모지 키우기 실패', emoji.name, error);
+            return null;
+          },
+        ),
+      ),
+    );
+    const failed = emojis.filter((_, i) => !scaled[i]);
+    if (failed.length) problems.push(`${label(failed)} 을 키우지 못했습니다.`);
+    emojis = scaled.filter(Boolean);
+  }
+
+  const note = problems.join('\n');
+  if (!emojis.length) return respond({ response_type: 'ephemeral', text: note });
 
   const askToConnect = (lead) => {
     if (!oauthEnabled) {
@@ -170,11 +186,10 @@ async function handleCommand(cmd, ack, respond, scale) {
       team: cmd.team_id,
       user: cmd.user_id,
       channel: cmd.channel_id,
-      name: emoji.name,
-      url: emoji.url,
+      emojis,
       responseUrl: cmd.response_url,
     });
-    const text = `${lead} 연결하면 :${emoji.name}: 이 바로 올라갑니다.`;
+    const text = `${lead} 연결하면 ${label(emojis)} 이 바로 올라갑니다.${note ? `\n${note}` : ''}`;
     return respond({
       response_type: 'ephemeral',
       text,
@@ -200,7 +215,8 @@ async function handleCommand(cmd, ack, respond, scale) {
   if (!userToken) return askToConnect('본인 이름으로 올리려면 한 번 연결해야 합니다.');
 
   try {
-    await app.client.chat.postMessage({ token: userToken, channel: cmd.channel_id, ...emojiBlocks(emoji) });
+    await app.client.chat.postMessage({ token: userToken, channel: cmd.channel_id, ...emojiBlocks(emojis) });
+    if (note) await respond({ response_type: 'ephemeral', text: note });
   } catch (error) {
     const code = error.data?.error;
     if (REVOKED.has(code)) {

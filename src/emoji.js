@@ -1,9 +1,15 @@
 const CACHE_MS = 10 * 60 * 1000;
 const MIN_REFRESH_MS = 30 * 1000;
 
-export function parseEmojiName(text) {
-  const match = text.trim().match(/^:?([^:\s]+?)(?:::skin-tone-\d)?:?$/);
-  return match ? match[1].toLowerCase() : null;
+export const MAX_EMOJIS = 5;
+
+// `:a: :b:`, `:a::b:`, `a, b` 를 모두 받는다. 피부색 수식자(`::skin-tone-2:`)는 버린다.
+export function parseEmojiNames(text) {
+  const names = text
+    .split(/[\s,:]+/)
+    .filter((part) => part && !/^skin-tone-\d$/.test(part))
+    .map((part) => part.toLowerCase());
+  return names.length ? names : null;
 }
 
 export function resolveEmoji(list, name) {
