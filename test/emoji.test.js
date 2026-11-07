@@ -9,6 +9,7 @@ test('parseEmojiName', () => {
   assert.equal(parseEmojiName(':Big-Cat:'), 'big-cat');
   assert.equal(parseEmojiName(''), null);
   assert.equal(parseEmojiName(':a: :b:'), null);
+  assert.equal(parseEmojiName(':고양이콘_윙크:'), '고양이콘_윙크');
 });
 
 test('resolveEmoji follows aliases', () => {

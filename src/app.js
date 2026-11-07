@@ -12,7 +12,12 @@ if (missing.length) {
 }
 
 const env = process.env;
-const command = env.SLASH_COMMAND ?? '/big';
+const command = env.SLASH_COMMAND?.trim() || '/big';
+const megaCommand = env.MEGA_COMMAND?.trim() || '/mega';
+if (command === megaCommand) {
+  console.error(`SLASH_COMMAND 와 MEGA_COMMAND 가 같습니다 (${command}). 서로 다른 이름을 써 주세요.`);
+  process.exit(1);
+}
 const oauthEnabled = Boolean(env.SLACK_CLIENT_ID && env.SLACK_CLIENT_SECRET && env.STATE_SECRET && env.PUBLIC_URL);
 const redirectUri = oauthEnabled ? `${env.PUBLIC_URL.replace(/\/$/, '')}/slack/oauth/callback` : null;
 const tokens = await createTokenStore(env.TOKEN_FILE ?? 'data/tokens.json');
@@ -108,8 +113,6 @@ const app = new App({
 
 const lookupEmoji = createEmojiCache(app.client);
 
-const megaCommand = env.MEGA_COMMAND ?? '/mega';
-
 app.command(command, ({ command: cmd, ack, respond }) => handleCommand(cmd, ack, respond, 1));
 app.command(megaCommand, ({ command: cmd, ack, respond }) => handleCommand(cmd, ack, respond, 2));
 
@@ -124,11 +127,25 @@ async function handleCommand(cmd, ack, respond, scale) {
     });
   }
 
-  const found = await lookupEmoji(name);
+  let found;
+  try {
+    found = await lookupEmoji(name);
+  } catch (error) {
+    app.logger.error('emoji.list 실패', error.data?.error ?? error);
+    return respond({ response_type: 'ephemeral', text: '이모지 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.' });
+  }
   if (!found) {
     return respond({
       response_type: 'ephemeral',
       text: `:${name}: 을 찾지 못했습니다. 워크스페이스에 추가된 커스텀 이모지만 쓸 수 있습니다.`,
+    });
+  }
+
+  const userToken = tokens.get(cmd.team_id, cmd.user_id);
+  if (!userToken && !oauthEnabled) {
+    return respond({
+      response_type: 'ephemeral',
+      text: '본인 이름으로 올리려면 한 번 연결해야 합니다. 아직 연결 기능이 꺼져 있습니다. 앱 관리자에게 문의해 주세요.',
     });
   }
 
@@ -180,7 +197,6 @@ async function handleCommand(cmd, ack, respond, scale) {
     });
   };
 
-  const userToken = tokens.get(cmd.team_id, cmd.user_id);
   if (!userToken) return askToConnect('본인 이름으로 올리려면 한 번 연결해야 합니다.');
 
   try {
@@ -201,4 +217,4 @@ app.action(CONNECT_ACTION, async ({ ack }) => {
 });
 
 await app.start();
-app.logger.info(`${command} 준비됨. ${oauthEnabled ? `OAuth 콜백: ${redirectUri}` : 'OAuth 꺼짐 (SLACK_CLIENT_SECRET, STATE_SECRET, PUBLIC_URL 필요)'}`);
+app.logger.info(`${command}, ${megaCommand} 준비됨. ${oauthEnabled ? `OAuth 콜백: ${redirectUri}` : 'OAuth 꺼짐 (SLACK_CLIENT_SECRET, STATE_SECRET, PUBLIC_URL 필요)'}`);

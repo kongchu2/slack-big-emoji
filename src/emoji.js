@@ -18,20 +18,38 @@ export function resolveEmoji(list, name) {
 }
 
 export function createEmojiCache(client) {
-  let list = {};
-  let fetchedAt = 0;
+  let list = null;
+  let nextRefreshAt = 0;
+  let lastAttemptAt = 0;
+  let pending = null;
 
-  async function refresh() {
-    const result = await client.emoji.list();
-    list = result.emoji ?? {};
-    fetchedAt = Date.now();
+  // 동시에 들어온 요청은 진행 중인 emoji.list 하나를 같이 기다린다.
+  // 실패하면 이전 목록을 그대로 쓰고, MIN_REFRESH_MS 뒤에야 다시 시도한다.
+  function refresh() {
+    pending ??= client.emoji
+      .list()
+      .then((result) => {
+        list = result.emoji ?? {};
+        nextRefreshAt = Date.now() + CACHE_MS;
+      })
+      .catch((error) => {
+        nextRefreshAt = Date.now() + MIN_REFRESH_MS;
+        if (!list) throw error;
+      })
+      .finally(() => {
+        lastAttemptAt = Date.now();
+        pending = null;
+      });
+    return pending;
   }
 
   return async function lookup(name) {
-    const age = Date.now() - fetchedAt;
-    if (age > CACHE_MS) await refresh();
+    if (!list || Date.now() >= nextRefreshAt) {
+      if (!list && Date.now() < nextRefreshAt) throw new Error('emoji.list 재시도 대기 중');
+      await refresh();
+    }
     let found = resolveEmoji(list, name);
-    if (!found && Date.now() - fetchedAt > MIN_REFRESH_MS) {
+    if (!found && Date.now() - lastAttemptAt > MIN_REFRESH_MS) {
       await refresh();
       found = resolveEmoji(list, name);
     }
