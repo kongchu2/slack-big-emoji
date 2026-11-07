@@ -136,15 +136,20 @@ app.command(filesCommand, ({ command: cmd, ack, respond }) => handleCommand(cmd,
 async function handleCommand(cmd, ack, respond, scale, asFiles = false) {
   await ack();
 
+  // 여러 개는 asFiles 커맨드(/bigs)만 받는다. /big, /mega 는 하나씩.
+  const max = asFiles ? MAX_EMOJIS : 1;
   const names = parseEmojiNames(cmd.text ?? '');
   if (!names) {
     return respond({
       response_type: 'ephemeral',
-      text: `사용법: \`${command} :이모지1: :이모지2:\`, 두 배로 크게: \`${megaCommand} :이모지이름:\` (한 번에 ${MAX_EMOJIS}개까지)`,
+      text: `사용법: \`${command} :이모지이름:\`, 두 배로 크게: \`${megaCommand} :이모지이름:\`, 여러 개 나란히: \`${filesCommand} :이모지1: :이모지2:\` (${MAX_EMOJIS}개까지)`,
     });
   }
-  if (names.length > MAX_EMOJIS) {
-    return respond({ response_type: 'ephemeral', text: `한 번에 ${MAX_EMOJIS}개까지 올릴 수 있습니다.` });
+  if (names.length > max) {
+    const text = asFiles
+      ? `한 번에 ${MAX_EMOJIS}개까지 올릴 수 있습니다.`
+      : `\`${cmd.command}\` 는 이모지 하나만 받습니다. 여러 개는 \`${filesCommand} :이모지1: :이모지2:\` 로 올려 주세요.`;
+    return respond({ response_type: 'ephemeral', text });
   }
 
   const userToken = tokens.get(cmd.team_id, cmd.user_id);
@@ -239,7 +244,18 @@ async function handleCommand(cmd, ack, respond, scale, asFiles = false) {
       await tokens.remove(cmd.team_id, cmd.user_id);
       return askToConnect('연결이 끊겼습니다.');
     }
-    app.logger.error('올리기 실패', code ?? error);
+    // Slack 이 image_url 을 받아 오지 못하면 invalid_blocks 를 준다. 이유는 response_metadata 에 있다.
+    if (code === 'invalid_blocks' && !asFiles) {
+      app.logger.warn('이미지 블록 거절, 첨부 파일로 다시 올림', label(emojis), error.data?.response_metadata?.messages);
+      try {
+        await deliver(userToken, cmd.channel_id, emojis, true);
+        if (note) await respond({ response_type: 'ephemeral', text: note });
+        return;
+      } catch (retryError) {
+        app.logger.error('첨부 파일로 다시 올리기도 실패', retryError.data?.error ?? retryError);
+      }
+    }
+    app.logger.error('올리기 실패', code ?? error, error.data?.response_metadata?.messages ?? '');
     return respond({ response_type: 'ephemeral', text: `올리지 못했습니다 (${code ?? '알 수 없는 오류'}).` });
   }
 }
