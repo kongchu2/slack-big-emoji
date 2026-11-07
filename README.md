@@ -1,13 +1,14 @@
 # slack-big-emoji
 
-`/big :party_parrot:` 처럼 입력하면 워크스페이스의 커스텀 이모지를 **본인 이름으로** 채널에 크게 올리는 Slack 앱입니다. GIF도 움직이는 채로 올라갑니다.
+`/big :party_parrot:` 처럼 입력하면 워크스페이스의 커스텀 이모지를 **본인 이름으로** 채널에 크게 올리는 Slack 앱입니다. GIF도 움직이는 채로 올라갑니다. `/big :party_parrot: x2` 는 두 배 크기로 올립니다.
 
 ## 동작
 
 1. `/big :이모지:`를 입력하면 앱이 `emoji.list`에서 이미지 URL을 찾습니다. 별칭(alias)도 따라갑니다.
-2. 처음 쓰는 사람에게는 본인만 보이는 연결 링크를 보냅니다. 연결하면 그 이모지가 바로 올라갑니다.
+2. 처음 쓰는 사람에게는 본인만 보이는 연결 버튼을 보냅니다. 연결하면 그 이모지가 바로 올라가고 버튼 메시지는 지워집니다.
 3. 그 뒤로는 저장된 사용자 토큰(`chat:write`)으로 이미지 블록 메시지를 올립니다.
 
+- Slack은 이미지 블록을 원본 픽셀 크기로 보여 주고 크기 지정 필드가 없습니다. 그래서 `x2` 는 서버가 이미지를 두 배로 키워 `data/img` 에 저장하고 `PUBLIC_URL/img/…` 로 제공합니다. 정지 이미지는 lanczos3, GIF는 nearest 로 키웁니다.
 - Socket Mode라서 Slack 이벤트를 받는 공개 서버는 필요 없습니다.
 - 다만 OAuth 연결이 끝난 뒤 브라우저가 돌아올 **콜백 주소**는 사용자 브라우저에서 열려야 하고, Slack은 HTTPS 주소를 요구합니다. Cloudflare Tunnel이나 Tailscale Funnel로 `PORT`를 열면 됩니다.
 - 사용자 토큰은 `data/tokens.json`(권한 600)에 저장합니다. 토큰이 취소되면 지우고 다시 연결 링크를 보냅니다.
@@ -42,6 +43,7 @@ npm start
 | `PORT` | 콜백 HTTP 서버 포트 (기본 3000) |
 | `SLASH_COMMAND` | 커맨드 이름 (기본 `/big`, manifest와 같아야 함) |
 | `TOKEN_FILE` | 사용자 토큰 저장 위치 (기본 `data/tokens.json`) |
+| `IMAGE_DIR` | 키운 이미지 저장 위치 (기본 `data/img`) |
 
 ## 테스트
 

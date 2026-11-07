@@ -1,5 +1,6 @@
 import { App, LogLevel } from '@slack/bolt';
-import { createEmojiCache, parseEmojiName } from './emoji.js';
+import { createEmojiCache, parseCommand } from './emoji.js';
+import { createScaler } from './scale.js';
 import { createState, readState } from './state.js';
 import { createTokenStore } from './tokens.js';
 
@@ -15,6 +16,8 @@ const command = env.SLASH_COMMAND ?? '/big';
 const oauthEnabled = Boolean(env.SLACK_CLIENT_ID && env.SLACK_CLIENT_SECRET && env.STATE_SECRET && env.PUBLIC_URL);
 const redirectUri = oauthEnabled ? `${env.PUBLIC_URL.replace(/\/$/, '')}/slack/oauth/callback` : null;
 const tokens = await createTokenStore(env.TOKEN_FILE ?? 'data/tokens.json');
+const scaler = env.PUBLIC_URL ? createScaler({ dir: env.IMAGE_DIR ?? 'data/img', publicUrl: env.PUBLIC_URL }) : null;
+const CONNECT_ACTION = 'connect';
 
 const REVOKED = new Set(['invalid_auth', 'token_revoked', 'account_inactive', 'not_authed', 'missing_scope']);
 
@@ -70,6 +73,14 @@ async function handleCallback(req, res) {
 
   await tokens.set(state.team, state.user, user.access_token);
 
+  if (state.responseUrl) {
+    fetch(state.responseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ delete_original: true }),
+    }).catch((error) => app.logger.warn('안내 메시지 지우기 실패', error));
+  }
+
   try {
     await app.client.chat.postMessage({
       token: user.access_token,
@@ -89,7 +100,10 @@ const app = new App({
   socketMode: true,
   logLevel: env.LOG_LEVEL ?? LogLevel.INFO,
   installerOptions: { port: Number(env.PORT ?? 3000) },
-  customRoutes: oauthEnabled ? [{ path: '/slack/oauth/callback', method: ['GET'], handler: handleCallback }] : [],
+  customRoutes: [
+    ...(oauthEnabled ? [{ path: '/slack/oauth/callback', method: ['GET'], handler: handleCallback }] : []),
+    ...(scaler ? [{ path: '/img/:file', method: ['GET'], handler: (req, res) => scaler.serve(req, res) }] : []),
+  ],
 });
 
 const lookupEmoji = createEmojiCache(app.client);
@@ -97,17 +111,34 @@ const lookupEmoji = createEmojiCache(app.client);
 app.command(command, async ({ command: cmd, ack, respond }) => {
   await ack();
 
-  const name = parseEmojiName(cmd.text ?? '');
-  if (!name) {
-    return respond({ response_type: 'ephemeral', text: `사용법: \`${command} :이모지이름:\`` });
+  const parsed = parseCommand(cmd.text ?? '');
+  if (!parsed) {
+    return respond({
+      response_type: 'ephemeral',
+      text: `사용법: \`${command} :이모지이름:\`, 두 배로 크게: \`${command} :이모지이름: x2\``,
+    });
   }
+  const { name, scale } = parsed;
 
-  const emoji = await lookupEmoji(name);
-  if (!emoji) {
+  const found = await lookupEmoji(name);
+  if (!found) {
     return respond({
       response_type: 'ephemeral',
       text: `:${name}: 을 찾지 못했습니다. 워크스페이스에 추가된 커스텀 이모지만 쓸 수 있습니다.`,
     });
+  }
+
+  let emoji = found;
+  if (scale > 1) {
+    if (!scaler) {
+      return respond({ response_type: 'ephemeral', text: '크게 키우기는 아직 꺼져 있습니다. 앱 관리자에게 문의해 주세요.' });
+    }
+    try {
+      emoji = { name: found.name, url: await scaler.scaledUrl(found, scale) };
+    } catch (error) {
+      app.logger.error('이모지 키우기 실패', error);
+      return respond({ response_type: 'ephemeral', text: `:${found.name}: 을 키우지 못했습니다.` });
+    }
   }
 
   const askToConnect = (lead) => {
@@ -120,10 +151,28 @@ app.command(command, async ({ command: cmd, ack, respond }) => {
       channel: cmd.channel_id,
       name: emoji.name,
       url: emoji.url,
+      responseUrl: cmd.response_url,
     });
+    const text = `${lead} 연결하면 :${emoji.name}: 이 바로 올라갑니다.`;
     return respond({
       response_type: 'ephemeral',
-      text: `${lead} <${authorizeUrl(state)}|여기서 연결>하면 :${emoji.name}: 이 바로 올라갑니다. 링크는 10분 동안 유효합니다.`,
+      text,
+      blocks: [
+        { type: 'section', text: { type: 'mrkdwn', text } },
+        {
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              action_id: CONNECT_ACTION,
+              style: 'primary',
+              text: { type: 'plain_text', text: 'Slack 계정 연결' },
+              url: authorizeUrl(state),
+            },
+          ],
+        },
+        { type: 'context', elements: [{ type: 'mrkdwn', text: '버튼은 10분 동안 쓸 수 있습니다.' }] },
+      ],
     });
   };
 
@@ -141,6 +190,10 @@ app.command(command, async ({ command: cmd, ack, respond }) => {
     app.logger.error('chat.postMessage 실패', code ?? error);
     return respond({ response_type: 'ephemeral', text: `올리지 못했습니다 (${code ?? '알 수 없는 오류'}).` });
   }
+});
+
+app.action(CONNECT_ACTION, async ({ ack }) => {
+  await ack();
 });
 
 await app.start();

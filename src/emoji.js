@@ -6,6 +6,21 @@ export function parseEmojiName(text) {
   return match ? match[1].toLowerCase() : null;
 }
 
+export function parseCommand(text) {
+  const parts = text.trim().split(/\s+/).filter(Boolean);
+  let scale = 1;
+  const rest = parts.filter((part) => {
+    if (/^(x2|2x)$/i.test(part)) {
+      scale = 2;
+      return false;
+    }
+    return true;
+  });
+  if (rest.length !== 1) return null;
+  const name = parseEmojiName(rest[0]);
+  return name ? { name, scale } : null;
+}
+
 export function resolveEmoji(list, name) {
   let current = name;
   for (let depth = 0; depth < 5; depth += 1) {
