@@ -7,7 +7,7 @@ test('parseEmojiNames', () => {
   assert.deepEqual(parseEmojiNames('  party_parrot '), ['party_parrot']);
   assert.deepEqual(parseEmojiNames(':thumbsup::skin-tone-2:'), ['thumbsup']);
   assert.deepEqual(parseEmojiNames(':Big-Cat:'), ['big-cat']);
-  assert.deepEqual(parseEmojiNames(':고양이콘_윙크:'), ['고양이콘_윙크']);
+  assert.deepEqual(parseEmojiNames(':Café_Wink:'), ['café_wink']);
   assert.equal(parseEmojiNames(''), null);
   assert.equal(parseEmojiNames('  :: , '), null);
   assert.deepEqual(parseEmojiNames(':a: :b:'), ['a', 'b']);

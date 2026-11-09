@@ -1,13 +1,13 @@
 display_information:
-  name: 큰 이모지
-  description: 커스텀 이모지를 본인 이름으로 크게 올립니다
+  name: Big Emoji
+  description: Post custom emoji as big images under your own name
 features:
   bot_user:
     display_name: big-emoji
     always_online: false
   slash_commands:
     - command: /big
-      description: 커스텀 이모지를 크게 올립니다
+      description: Post a custom emoji as a big image
       usage_hint: ":party_parrot:"
       should_escape: false
 oauth_config:

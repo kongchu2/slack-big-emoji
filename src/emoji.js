@@ -1,7 +1,7 @@
 const CACHE_MS = 10 * 60 * 1000;
 const MIN_REFRESH_MS = 30 * 1000;
 
-// `:a: :b:`, `:a::b:`, `a, b` 를 모두 받는다. 피부색 수식자(`::skin-tone-2:`)는 버린다.
+// Accepts `:a: :b:`, `:a::b:` and `a, b`. Skin tone modifiers (`::skin-tone-2:`) are dropped.
 export function parseEmojiNames(text) {
   const names = text
     .split(/[\s,:]+/)
@@ -27,8 +27,8 @@ export function createEmojiCache(client) {
   let lastAttemptAt = 0;
   let pending = null;
 
-  // 동시에 들어온 요청은 진행 중인 emoji.list 하나를 같이 기다린다.
-  // 실패하면 이전 목록을 그대로 쓰고, MIN_REFRESH_MS 뒤에야 다시 시도한다.
+  // Concurrent lookups share one in-flight emoji.list call.
+  // On failure the previous list is kept, and the next retry waits MIN_REFRESH_MS.
   function refresh() {
     pending ??= client.emoji
       .list()
@@ -49,7 +49,7 @@ export function createEmojiCache(client) {
 
   return async function lookup(name) {
     if (!list || Date.now() >= nextRefreshAt) {
-      if (!list && Date.now() < nextRefreshAt) throw new Error('emoji.list 재시도 대기 중');
+      if (!list && Date.now() < nextRefreshAt) throw new Error('emoji.list retry pending');
       await refresh();
     }
     let found = resolveEmoji(list, name);

@@ -2,7 +2,7 @@
   "name": "slack-big-emoji",
   "version": "0.1.0",
   "private": true,
-  "description": "/big :emoji: 로 커스텀 이모지를 본인 이름으로 크게 올리는 Slack 앱",
+  "description": "Slack app that posts custom emoji as big images under your own name with /big :emoji:",
   "license": "MIT",
   "type": "module",
   "main": "src/app.js",
