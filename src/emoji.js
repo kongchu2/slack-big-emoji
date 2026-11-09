@@ -1,8 +1,6 @@
 const CACHE_MS = 10 * 60 * 1000;
 const MIN_REFRESH_MS = 30 * 1000;
 
-export const MAX_EMOJIS = 4;
-
 // `:a: :b:`, `:a::b:`, `a, b` 를 모두 받는다. 피부색 수식자(`::skin-tone-2:`)는 버린다.
 export function parseEmojiNames(text) {
   const names = text

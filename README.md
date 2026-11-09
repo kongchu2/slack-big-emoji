@@ -6,14 +6,15 @@ Slack에서 이모지만 단독으로 보내도 작은 크기로만 보입니다
 
 ## 사용법
 
-| 명령어 | 하는 일 |
-| --- | --- |
-| `/big :party_parrot:` | 이모지 하나를 이미지 블록으로 크게 올립니다. |
-| `/bigs :cat: :dog: :fox:` | 이모지를 한 번에 4개까지 첨부 파일로 올립니다. Slack이 파일 여러 개를 옆으로 나란히 보여 줍니다. |
+```
+/big :party_parrot:
+```
 
-- 이름은 `:a: :b:`, `:a::b:`, `a, b` 어느 형태로 적어도 됩니다. 대소문자는 가리지 않고, 피부색 수식자(`::skin-tone-2:`)는 무시합니다.
+이모지 하나를 이미지 블록으로 크게 올립니다. 한 번에 하나만 받습니다.
+
+- 이름은 `:party_parrot:` 이나 `party_parrot` 어느 형태로 적어도 됩니다. 대소문자는 가리지 않고, 피부색 수식자(`::skin-tone-2:`)는 무시합니다.
 - 별칭(alias) 이모지는 원본 이모지를 찾아 올립니다.
-- 찾지 못한 이모지는 나에게만 보이는 메시지로 알려 주고, 찾은 것만 올립니다.
+- 찾지 못한 이모지는 나에게만 보이는 메시지로 알려 줍니다.
 - 명령어만 입력하면 사용법을 알려 줍니다.
 
 ### 처음 쓸 때: 계정 연결
@@ -41,8 +42,7 @@ Slack에서 이모지만 단독으로 보내도 작은 크기로만 보입니다
                                             │    ├─ 없음 → 연결 버튼 (OAuth) → 콜백에서 토큰 저장 후 바로 올림
                                             │    └─ 있음 → 3으로
                                             ▼ 3. 사용자 토큰으로 올리기
-                              /big : chat.postMessage (이미지 블록, Slack CDN 의 이모지 URL)
-                              /bigs: filesUploadV2 (이미지를 받아서 파일로 업로드)
+                              chat.postMessage (이미지 블록, Slack CDN 의 이모지 URL)
 ```
 
 - **Socket Mode**를 써서 앱이 Slack에 먼저 연결합니다. Slack 이벤트를 받으려고 서버 포트를 열 필요가 없습니다.
@@ -58,7 +58,6 @@ Slack에서 이모지만 단독으로 보내도 작은 크기로만 보입니다
 | 봇 | `commands` | 슬래시 커맨드 받기 |
 | 봇 | `emoji:read` | 커스텀 이모지 목록 조회 |
 | 사용자 | `chat:write` | `/big` 메시지를 내 이름으로 올리기 |
-| 사용자 | `files:write` | `/bigs` 첨부 파일을 내 이름으로 올리기 |
 
 앱은 사용자 토큰을 이모지를 올리는 데만 씁니다. 메시지를 읽는 권한은 받지 않습니다.
 
@@ -78,7 +77,7 @@ npm install
 npm start
 ```
 
-로그에 `/big, /bigs 준비됨. OAuth 콜백: https://…`가 나오면 준비된 것입니다. `OAuth 꺼짐`이 나오면 `SLACK_CLIENT_SECRET`, `STATE_SECRET`, `PUBLIC_URL` 중 빈 값이 있는 것입니다. 이때는 새 사용자가 연결할 수 없습니다.
+로그에 `/big 준비됨. OAuth 콜백: https://…`가 나오면 준비된 것입니다. `OAuth 꺼짐`이 나오면 `SLACK_CLIENT_SECRET`, `STATE_SECRET`, `PUBLIC_URL` 중 빈 값이 있는 것입니다. 이때는 새 사용자가 연결할 수 없습니다.
 
 ## 환경 변수
 
@@ -90,8 +89,7 @@ npm start
 | `STATE_SECRET` | 연결용 | 연결 버튼 서명용 비밀값. 바꾸면 이미 보낸 버튼만 무효가 됩니다. |
 | `PUBLIC_URL` | 연결용 | 콜백이 열리는 HTTPS 주소 |
 | `PORT` | | 콜백 HTTP 서버 포트 (기본 `3000`) |
-| `SLASH_COMMAND` | | 이모지 하나 커맨드 이름 (기본 `/big`, Slack 앱 설정과 같아야 함) |
-| `FILES_COMMAND` | | 여러 개 커맨드 이름 (기본 `/bigs`, Slack 앱 설정과 같아야 함) |
+| `SLASH_COMMAND` | | 커맨드 이름 (기본 `/big`, Slack 앱 설정과 같아야 함) |
 | `TOKEN_FILE` | | 사용자 토큰 저장 위치 (기본 `data/tokens.json`) |
 | `LOG_LEVEL` | | Bolt 로그 레벨 (기본 `info`) |
 
@@ -99,7 +97,7 @@ npm start
 
 | 파일 | 내용 |
 | --- | --- |
-| `src/app.js` | Bolt 앱, 커맨드 처리, OAuth 콜백, 메시지/파일 올리기 |
+| `src/app.js` | Bolt 앱, 커맨드 처리, OAuth 콜백, 메시지 올리기 |
 | `src/emoji.js` | 이모지 이름 파싱, 별칭 따라가기, `emoji.list` 캐시 |
 | `src/state.js` | 연결 버튼 `state` 서명과 검증 |
 | `src/tokens.js` | 사용자 토큰 파일 저장소 |
