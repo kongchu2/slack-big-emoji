@@ -27,7 +27,7 @@ This is a self-hosted app. There is no public install link: you create your own 
 
 Limitations:
 
-- Custom emoji only. Unicode emoji such as 😀 are not supported.
+- Custom emoji only. Unicode emoji such as 😀 are not supported, and neither are custom aliases that point at a built-in emoji.
 - One emoji per command.
 - Slack does not allow slash commands inside threads.
 - Nothing is scaled up. A 64px emoji shows at 64px.
@@ -35,7 +35,7 @@ Limitations:
 ## How it works
 
 1. Slack delivers `/big` to the app over Socket Mode.
-2. The app finds the emoji's image URL with `emoji.list`, using the bot token. The list is cached for 10 minutes.
+2. The app finds the emoji's image URL with `emoji.list`, using the bot token. The list is cached for 10 minutes. A name that is not in the cache triggers an early refresh, at most once every 30 seconds, so new emoji work almost right away.
 3. The app posts a message with an image block that points at that URL, using your user token. No image is downloaded or re-uploaded.
 
 If you have no user token yet, step 3 is replaced by the connect button. It opens Slack's OAuth page, and the callback saves your token and posts the emoji you asked for. The button is signed with `STATE_SECRET`, works for 10 minutes, and is rejected if you approve with a different account. If you later revoke the app, the next `/big` shows the button again.
@@ -81,14 +81,16 @@ One deployment serves one workspace.
 | `PUBLIC_URL` | For connecting | HTTPS origin where the callback is reachable, e.g. `https://big-emoji.example.com` |
 | `PORT` | No | Port of the callback server. Default `3000`. |
 | `SLASH_COMMAND` | No | Command name. Default `/big`. Must match the Slack app's command. |
-| `TOKEN_FILE` | No | Where user tokens are stored. Default `data/tokens.json`. |
-| `LOG_LEVEL` | No | Bolt log level. Default `info`. |
+| `TOKEN_FILE` | No | Where user tokens are stored, relative to the directory the app is started from. Default `data/tokens.json`. |
+| `LOG_LEVEL` | No | Bolt log level: `debug`, `info`, `warn` or `error`. Default `info`. |
+
+Optional variables fall back to their default when left empty.
 
 ## Token file
 
-`data/tokens.json` holds user tokens in plain JSON (mode `600`). Anyone with this file can post as those users.
+The token file (`data/tokens.json`, or the path set by `TOKEN_FILE`) holds user tokens in plain JSON (mode `600`). Anyone with this file can post as those users.
 
-- Keep it out of git and out of backups you share.
+- Keep it out of git and out of backups you share. `.gitignore` only covers `data/`, so if you change the path, add your own entries for the file and the `.tmp` file written next to it.
 - Don't overwrite it when deploying.
 - Move it with the app when you switch servers, or every user has to reconnect.
 
