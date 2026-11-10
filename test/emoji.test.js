@@ -24,3 +24,8 @@ test('resolveEmoji follows aliases', () => {
   assert.equal(resolveEmoji(list, 'nope'), null);
 });
 
+test('resolveEmoji ignores names inherited from Object.prototype', () => {
+  const list = { parrot: 'https://e/p.gif' };
+  assert.equal(resolveEmoji(list, 'constructor'), null);
+  assert.equal(resolveEmoji(list, '__proto__'), null);
+});

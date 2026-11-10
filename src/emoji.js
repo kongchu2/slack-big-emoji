@@ -13,8 +13,9 @@ export function parseEmojiNames(text) {
 export function resolveEmoji(list, name) {
   let current = name;
   for (let depth = 0; depth < 5; depth += 1) {
-    const value = list[current];
-    if (value === undefined) return null;
+    // Own properties only: names like `constructor` must not hit Object.prototype.
+    const value = Object.hasOwn(list, current) ? list[current] : undefined;
+    if (typeof value !== 'string') return null;
     if (!value.startsWith('alias:')) return { name: current, url: value };
     current = value.slice('alias:'.length);
   }

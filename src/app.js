@@ -11,10 +11,25 @@ if (missing.length) {
 }
 
 const env = process.env;
-const command = env.SLASH_COMMAND?.trim() || '/big';
+// Optional variables fall back to their default when unset or left empty.
+const optional = (name, fallback) => env[name]?.trim() || fallback;
+
+const command = optional('SLASH_COMMAND', '/big');
+const port = Number(optional('PORT', '3000'));
+if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  console.error(`Invalid PORT: ${env.PORT}`);
+  process.exit(1);
+}
+const requestedLogLevel = optional('LOG_LEVEL', LogLevel.INFO).toLowerCase();
+const logLevel = Object.values(LogLevel).includes(requestedLogLevel) ? requestedLogLevel : LogLevel.INFO;
+if (logLevel !== requestedLogLevel) {
+  console.warn(`Unknown LOG_LEVEL "${env.LOG_LEVEL}", using "${logLevel}". Allowed: ${Object.values(LogLevel).join(', ')}`);
+}
 const oauthEnabled = Boolean(env.SLACK_CLIENT_ID && env.SLACK_CLIENT_SECRET && env.STATE_SECRET && env.PUBLIC_URL);
 const redirectUri = oauthEnabled ? `${env.PUBLIC_URL.replace(/\/$/, '')}/slack/oauth/callback` : null;
-const tokens = await createTokenStore(env.TOKEN_FILE ?? 'data/tokens.json');
+const tokens = await createTokenStore(optional('TOKEN_FILE', 'data/tokens.json'), {
+  onSaveError: (error) => app.logger.error('Failed to save the token file, will retry', error),
+});
 const CONNECT_ACTION = 'connect';
 
 const REVOKED = new Set(['invalid_auth', 'token_revoked', 'account_inactive', 'not_authed', 'missing_scope']);
@@ -96,8 +111,8 @@ const app = new App({
   token: env.SLACK_BOT_TOKEN,
   appToken: env.SLACK_APP_TOKEN,
   socketMode: true,
-  logLevel: env.LOG_LEVEL ?? LogLevel.INFO,
-  installerOptions: { port: Number(env.PORT ?? 3000) },
+  logLevel,
+  installerOptions: { port },
   customRoutes: [
     ...(oauthEnabled ? [{ path: '/slack/oauth/callback', method: ['GET'], handler: handleCallback }] : []),
   ],
@@ -192,4 +207,4 @@ app.action(CONNECT_ACTION, async ({ ack }) => {
 });
 
 await app.start();
-app.logger.info(`${command} ready. ${oauthEnabled ? `OAuth callback: ${redirectUri}` : 'OAuth disabled (needs SLACK_CLIENT_SECRET, STATE_SECRET, PUBLIC_URL)'}`);
+app.logger.info(`${command} ready. ${oauthEnabled ? `OAuth callback: ${redirectUri}` : 'OAuth disabled (needs SLACK_CLIENT_ID, SLACK_CLIENT_SECRET, STATE_SECRET, PUBLIC_URL)'}`);
