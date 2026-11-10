@@ -1,41 +1,96 @@
 # slack-big-emoji
 
-A Slack app that posts a workspace custom emoji as a big image, under your own name.
+Post a Slack custom emoji as a big image, as yourself.
 
 ```
 /big :party_parrot:
 ```
 
-The emoji is posted at its original size from your account, not a bot. Animated GIFs stay animated. Aliases resolve to the original emoji.
+![The same emoji posted with /big (top) and as a normal Slack message (bottom)](docs/demo.gif)
 
-The first time you use it, you get a **Connect Slack account** button (visible only to you). Approve once in the browser and the emoji is posted right away. After that, it just works.
+*Top: posted with `/big`. Bottom: the same emoji in a normal message.*
 
-Limitations: custom emoji only (no Unicode emoji), one emoji per command, and slash commands can't be used inside threads.
+Slack shows emoji small, even when a message is nothing but the emoji. `/big` posts the emoji's original image instead, so it shows at full size (up to 128px). The message comes from your own account, not a bot, and animated emoji stay animated.
+
+This is a self-hosted app. There is no public install link: you create your own Slack app and run this small Node server for your workspace.
+
+## Usage
+
+```
+/big :party_parrot:
+/big party_parrot
+```
+
+- Both forms work. Names are case-insensitive, and aliases resolve to the original emoji.
+- The first time, you get a **Connect Slack account** button that only you can see. Approve once in the browser and the emoji is posted right away. After that, `/big` just works.
+- Errors (unknown emoji, more than one emoji) are shown only to you.
+
+Limitations:
+
+- Custom emoji only. Unicode emoji such as 😀 are not supported.
+- One emoji per command.
+- Slack does not allow slash commands inside threads.
+- Nothing is scaled up. A 64px emoji shows at 64px.
+
+## How it works
+
+1. Slack delivers `/big` to the app over Socket Mode.
+2. The app finds the emoji's image URL with `emoji.list`, using the bot token. The list is cached for 10 minutes.
+3. The app posts a message with an image block that points at that URL, using your user token. No image is downloaded or re-uploaded.
+
+If you have no user token yet, step 3 is replaced by the connect button. It opens Slack's OAuth page, and the callback saves your token and posts the emoji you asked for. The button is signed with `STATE_SECRET`, works for 10 minutes, and is rejected if you approve with a different account. If you later revoke the app, the next `/big` shows the button again.
+
+## Permissions
+
+| Token | Scope | Used for |
+| --- | --- | --- |
+| Bot | `commands` | Receiving the slash command |
+| Bot | `emoji:read` | Listing the workspace's custom emoji |
+| User | `chat:write` | Posting the emoji as you |
+
+The app uses your user token only to post the emoji you asked for. It requests no scope that reads messages.
 
 ## Setup
 
-1. Create an app at https://api.slack.com/apps → **From a manifest**, paste `manifest.yml`, and set `redirect_urls` to your public URL.
-2. Create an App-Level Token with `connections:write` → `SLACK_APP_TOKEN`.
-3. Install to your workspace → Bot User OAuth Token → `SLACK_BOT_TOKEN`.
-4. Copy Client ID / Client Secret → `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`.
-5. Fill in `.env` and run (Node 22+):
+You need Node 22+ and a public HTTPS URL that forwards to the app's port, for example through Cloudflare Tunnel or Tailscale Funnel. The app uses Socket Mode, so the only public endpoint is the OAuth callback at `/slack/oauth/callback`.
+
+1. Create an app at https://api.slack.com/apps → **From a manifest**, paste `manifest.yml`, and set `redirect_urls` to `https://<your host>/slack/oauth/callback`.
+2. **Basic Information → App-Level Tokens**: create a token with `connections:write` → `SLACK_APP_TOKEN`.
+3. Install the app to your workspace. **OAuth & Permissions → Bot User OAuth Token** → `SLACK_BOT_TOKEN`.
+4. **Basic Information → App Credentials**: Client ID and Client Secret → `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`.
+5. Fill in `.env` and run:
 
 ```sh
-cp .env.example .env   # STATE_SECRET: openssl rand -hex 32, PUBLIC_URL: your HTTPS URL
+cp .env.example .env
 npm install
 npm start
 ```
 
-The app uses Socket Mode, so the only public endpoint is the OAuth callback at `/slack/oauth/callback` (e.g. via Cloudflare Tunnel or Tailscale Funnel on `PORT`, default `3000`).
+The app is ready when the log says `/big ready. OAuth callback: https://…`. If it says `OAuth disabled`, one of `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `STATE_SECRET`, `PUBLIC_URL` is empty and new users can't connect.
 
-Scopes: bot `commands`, `emoji:read`; user `chat:write`.
+One deployment serves one workspace.
 
-If the log says `OAuth disabled`, one of `SLACK_CLIENT_SECRET`, `STATE_SECRET`, `PUBLIC_URL` is empty and new users can't connect.
+## Configuration
 
-## Notes
+| Variable | Required | Description |
+| --- | --- | --- |
+| `SLACK_BOT_TOKEN` | Yes | Bot token (`xoxb-…`) |
+| `SLACK_APP_TOKEN` | Yes | App-level token for Socket Mode (`xapp-…`) |
+| `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` | For connecting | OAuth credentials of the Slack app |
+| `STATE_SECRET` | For connecting | Secret that signs the connect button. Generate with `openssl rand -hex 32`. |
+| `PUBLIC_URL` | For connecting | HTTPS origin where the callback is reachable, e.g. `https://big-emoji.example.com` |
+| `PORT` | No | Port of the callback server. Default `3000`. |
+| `SLASH_COMMAND` | No | Command name. Default `/big`. Must match the Slack app's command. |
+| `TOKEN_FILE` | No | Where user tokens are stored. Default `data/tokens.json`. |
+| `LOG_LEVEL` | No | Bolt log level. Default `info`. |
 
-- **Size follows the original image.** Nothing is scaled up, so a 64px emoji shows at 64px and a 16px emoji stays tiny. Slack stores custom emoji at up to 128px.
-- **`data/tokens.json` holds user tokens in plain JSON** (mode `600`, path set by `TOKEN_FILE`). Anyone with this file can post as those users. Keep it out of git and backups you share, don't overwrite it when deploying, and move it with the app when you switch servers, or every user has to reconnect.
+## Token file
+
+`data/tokens.json` holds user tokens in plain JSON (mode `600`). Anyone with this file can post as those users.
+
+- Keep it out of git and out of backups you share.
+- Don't overwrite it when deploying.
+- Move it with the app when you switch servers, or every user has to reconnect.
 
 ## Test
 
