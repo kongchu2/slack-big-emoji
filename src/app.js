@@ -149,7 +149,8 @@ app.command(command, async ({ command: cmd, ack, respond }) => {
   if (!emoji) {
     return respond({
       response_type: 'ephemeral',
-      text: `Could not find :${names[0]}:. Only custom emoji added to this workspace are supported.`,
+      // In a code span, so Slack does not render the name as an emoji or as markdown.
+      text: `Could not find \`:${names[0]}:\`. Only custom emoji added to this workspace are supported.`,
     });
   }
 
