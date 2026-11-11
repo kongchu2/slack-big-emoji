@@ -1,6 +1,6 @@
 # slack-big-emoji
 
-Post a Slack custom emoji as a big image, as yourself.
+Post a Slack emoji as a big image, as yourself.
 
 ```
 /big :party_parrot:
@@ -10,7 +10,7 @@ Post a Slack custom emoji as a big image, as yourself.
 
 *Top: posted with `/big`. Bottom: the same emoji in a normal message.*
 
-Slack shows emoji small, even when a message is nothing but the emoji. `/big` posts the emoji's original image instead, so it shows at full size (up to 128px). The message comes from your own account, not a bot, and animated emoji stay animated.
+Slack shows emoji small, even when a message is nothing but the emoji. `/big` posts the emoji's original image instead, so it shows at full size (up to 128px for custom emoji, 160px for built-in ones). The message comes from your own account, not a bot, and animated emoji stay animated.
 
 This is a self-hosted app. There is no public install link: you create your own Slack app and run this small Node server for your workspace.
 
@@ -19,23 +19,25 @@ This is a self-hosted app. There is no public install link: you create your own 
 ```
 /big :party_parrot:
 /big party_parrot
+/big :thumbsup::skin-tone-3:
 ```
 
 - Both forms work. Names are case-insensitive, and aliases resolve to the original emoji.
+- Built-in emoji such as `:smile:` work too, with skin tones. They are posted as Apple's 160px image.
 - The first time, you get a **Connect Slack account** button that only you can see. Approve once in the browser and the emoji is posted right away. After that, `/big` just works.
 - Errors (unknown emoji, more than one emoji) are shown only to you.
 
 Limitations:
 
-- Custom emoji only. Unicode emoji such as 😀 are not supported, and neither are custom aliases that point at a built-in emoji.
 - One emoji per command.
 - Slack does not allow slash commands inside threads.
 - Nothing is scaled up. A 64px emoji shows at 64px.
+- Built-in emoji images are loaded from jsDelivr (the [emoji-data](https://github.com/iamcal/emoji-data) repository), not from Slack. If that CDN is down, only built-in emoji fail.
 
 ## How it works
 
 1. Slack delivers `/big` to the app over Socket Mode.
-2. The app finds the emoji's image URL with `emoji.list`, using the bot token. The list is cached for 10 minutes. A name that is not in the cache triggers an early refresh, at most once every 30 seconds, so new emoji work almost right away.
+2. The app finds the emoji's image URL with `emoji.list`, using the bot token. The list is cached for 10 minutes. A name that is not in the cache triggers an early refresh, at most once every 30 seconds, so new emoji work almost right away. A name that is not a custom emoji is looked up in the bundled `emoji-datasource` list of built-in emoji, which gives an image URL on jsDelivr.
 3. The app posts a message with an image block that points at that URL, using your user token. No image is downloaded or re-uploaded.
 
 If you have no user token yet, step 3 is replaced by the connect button. It opens Slack's OAuth page, and the callback saves your token and posts the emoji you asked for. The button is signed with `STATE_SECRET`, works for 10 minutes, and is rejected if you approve with a different account. If you later revoke the app, the next `/big` shows the button again.

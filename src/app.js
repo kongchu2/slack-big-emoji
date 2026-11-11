@@ -1,5 +1,5 @@
 import { App, LogLevel } from '@slack/bolt';
-import { createEmojiCache, parseEmojiNames } from './emoji.js';
+import { createEmojiCache, parseEmojiNames, parseSkinTone } from './emoji.js';
 import { createState, readState } from './state.js';
 import { createTokenStore } from './tokens.js';
 
@@ -141,7 +141,7 @@ app.command(command, async ({ command: cmd, ack, respond }) => {
 
   let emoji;
   try {
-    emoji = await lookupEmoji(names[0]);
+    emoji = await lookupEmoji(names[0], parseSkinTone(cmd.text));
   } catch (error) {
     app.logger.error('emoji.list failed', error.data?.error ?? error);
     return respond({ response_type: 'ephemeral', text: 'Could not load the emoji list. Please try again later.' });
@@ -150,7 +150,7 @@ app.command(command, async ({ command: cmd, ack, respond }) => {
     return respond({
       response_type: 'ephemeral',
       // In a code span, so Slack does not render the name as an emoji or as markdown.
-      text: `Could not find \`:${names[0]}:\`. Only custom emoji added to this workspace are supported.`,
+      text: `Could not find \`:${names[0]}:\`.`,
     });
   }
 

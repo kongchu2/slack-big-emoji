@@ -1,13 +1,13 @@
 display_information:
   name: Big Emoji
-  description: Post custom emoji as big images under your own name
+  description: Post emoji as big images under your own name
 features:
   bot_user:
     display_name: big-emoji
     always_online: false
   slash_commands:
     - command: /big
-      description: Post a custom emoji as a big image
+      description: Post an emoji as a big image
       usage_hint: ":party_parrot:"
       should_escape: false
 oauth_config:
