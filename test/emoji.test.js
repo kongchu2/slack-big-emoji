@@ -1,19 +1,44 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { parseEmojiNames, parseSkinTone, resolveEmoji } from '../src/emoji.js';
+import { displayName, parseEmoji, resolveEmoji } from '../src/emoji.js';
 
-test('parseEmojiNames', () => {
-  assert.deepEqual(parseEmojiNames(':party_parrot:'), ['party_parrot']);
-  assert.deepEqual(parseEmojiNames('  party_parrot '), ['party_parrot']);
-  assert.deepEqual(parseEmojiNames(':thumbsup::skin-tone-2:'), ['thumbsup']);
-  assert.deepEqual(parseEmojiNames(':Big-Cat:'), ['big-cat']);
-  assert.deepEqual(parseEmojiNames(':Café_Wink:'), ['café_wink']);
-  assert.equal(parseEmojiNames(''), null);
-  assert.equal(parseEmojiNames('  :: , '), null);
-  assert.deepEqual(parseEmojiNames(':a: :b:'), ['a', 'b']);
-  assert.deepEqual(parseEmojiNames(':a::b:'), ['a', 'b']);
-  assert.deepEqual(parseEmojiNames('emoji_1, emoji_2'), ['emoji_1', 'emoji_2']);
-  assert.deepEqual(parseEmojiNames(':a::skin-tone-3: :b:'), ['a', 'b']);
+const names = (text) => parseEmoji(text)?.names ?? null;
+
+test('parseEmoji names', () => {
+  assert.deepEqual(names(':party_parrot:'), ['party_parrot']);
+  assert.deepEqual(names('  party_parrot '), ['party_parrot']);
+  assert.deepEqual(names(':thumbsup::skin-tone-2:'), ['thumbsup']);
+  assert.deepEqual(names(':Big-Cat:'), ['big-cat']);
+  assert.deepEqual(names(':Café_Wink:'), ['café_wink']);
+  assert.equal(names(''), null);
+  assert.equal(names('  :: , '), null);
+  assert.deepEqual(names(':a: :b:'), ['a', 'b']);
+  assert.deepEqual(names(':a::b:'), ['a', 'b']);
+  assert.deepEqual(names('emoji_1, emoji_2'), ['emoji_1', 'emoji_2']);
+  assert.deepEqual(names(':a::skin-tone-3: :b:'), ['a', 'b']);
+});
+
+test('parseEmoji skin tones', () => {
+  assert.equal(parseEmoji(':thumbsup::skin-tone-2:').skinTone, 2);
+  assert.equal(parseEmoji(':thumbsup: :skin-tone-6:').skinTone, 6);
+  assert.equal(parseEmoji(':thumbsup:').skinTone, null);
+  assert.deepEqual(parseEmoji(':THUMBSUP::SKIN-TONE-2:'), { names: ['thumbsup'], skinTone: 2 });
+  assert.deepEqual(parseEmoji('👍 :skin-tone-3:'), { names: ['👍'], skinTone: 3 });
+  assert.deepEqual(parseEmoji('👍:skin-tone-3:'), { names: ['👍'], skinTone: 3 });
+  // Not a tone: other names, out of range, or nothing before it to modify.
+  assert.deepEqual(parseEmoji(':a: :my-skin-tone-2:'), { names: ['a', 'my-skin-tone-2'], skinTone: null });
+  assert.deepEqual(parseEmoji(':a::skin-tone-7:'), { names: ['a', 'skin-tone-7'], skinTone: null });
+  assert.deepEqual(parseEmoji(':skin-tone-2:'), { names: ['skin-tone-2'], skinTone: null });
+});
+
+test('parseEmoji emoji characters', () => {
+  assert.deepEqual(names('😄'), ['😄']);
+  assert.deepEqual(names('😄😄'), ['😄', '😄']);
+  assert.deepEqual(names('👍🏻'), ['👍🏻']);
+  assert.deepEqual(names('🇰🇷'), ['🇰🇷']);
+  assert.deepEqual(names('\u24c2\ufe0f'), ['\u24c2\ufe0f']);
+  assert.equal(displayName('😄'), '😄');
+  assert.equal(displayName('smile'), ':smile:');
 });
 
 test('resolveEmoji follows aliases', () => {
@@ -28,14 +53,6 @@ test('resolveEmoji ignores names inherited from Object.prototype', () => {
   const list = { parrot: 'https://e/p.gif' };
   assert.equal(resolveEmoji(list, 'constructor'), null);
   assert.equal(resolveEmoji(list, '__proto__'), null);
-});
-
-test('parseSkinTone', () => {
-  assert.equal(parseSkinTone(':thumbsup::skin-tone-2:'), 2);
-  assert.equal(parseSkinTone(':thumbsup: :skin-tone-6:'), 6);
-  assert.equal(parseSkinTone(':thumbsup:'), null);
-  assert.equal(parseSkinTone(':my-skin-tone-2:'), null);
-  assert.equal(parseSkinTone(':skin-tone-7:'), null);
 });
 
 test('resolveEmoji hands non-custom names and built-in aliases to the fallback', () => {

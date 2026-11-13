@@ -28,4 +28,12 @@ test('resolves emoji characters', () => {
   assert.equal(resolveBuiltinEmoji('❤️').name, 'heart');
   assert.equal(resolveBuiltinEmoji('❤').name, 'heart');
   assert.equal(resolveBuiltinEmoji('🇰🇷').name, 'kr');
+  assert.equal(resolveBuiltinEmoji('\u24c2\ufe0f').name, 'm');
+});
+
+test('applies a separate skin tone to an emoji character', () => {
+  assert.deepEqual(resolveBuiltinEmoji('👍', 3), resolveBuiltinEmoji('+1', 3));
+  // A tone carried by the character wins.
+  assert.equal(resolveBuiltinEmoji('👍🏻', 3).name, '+1::skin-tone-2');
+  assert.deepEqual(resolveBuiltinEmoji('😄', 3), resolveBuiltinEmoji('smile'));
 });

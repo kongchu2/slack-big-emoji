@@ -1,5 +1,5 @@
 import { App, LogLevel } from '@slack/bolt';
-import { createEmojiCache, parseEmojiNames, parseSkinTone } from './emoji.js';
+import { createEmojiCache, displayName, parseEmoji } from './emoji.js';
 import { createState, readState } from './state.js';
 import { createTokenStore } from './tokens.js';
 
@@ -123,10 +123,11 @@ const lookupEmoji = createEmojiCache(app.client);
 app.command(command, async ({ command: cmd, ack, respond }) => {
   await ack();
 
-  const names = parseEmojiNames(cmd.text ?? '');
-  if (!names) {
+  const parsed = parseEmoji(cmd.text ?? '');
+  if (!parsed) {
     return respond({ response_type: 'ephemeral', text: `Usage: \`${command} :emoji_name:\`` });
   }
+  const { names, skinTone } = parsed;
   if (names.length > 1) {
     return respond({ response_type: 'ephemeral', text: `\`${command}\` takes only one emoji.` });
   }
@@ -141,7 +142,7 @@ app.command(command, async ({ command: cmd, ack, respond }) => {
 
   let emoji;
   try {
-    emoji = await lookupEmoji(names[0], parseSkinTone(cmd.text));
+    emoji = await lookupEmoji(names[0], skinTone);
   } catch (error) {
     app.logger.error('emoji.list failed', error.data?.error ?? error);
     return respond({ response_type: 'ephemeral', text: 'Could not load the emoji list. Please try again later.' });
@@ -150,7 +151,7 @@ app.command(command, async ({ command: cmd, ack, respond }) => {
     return respond({
       response_type: 'ephemeral',
       // In a code span, so Slack does not render the name as an emoji or as markdown.
-      text: `Could not find \`:${names[0]}:\`.`,
+      text: `Could not find \`${displayName(names[0])}\`.`,
     });
   }
 

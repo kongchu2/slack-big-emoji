@@ -3,6 +3,7 @@ import pkg from 'emoji-datasource/package.json' with { type: 'json' };
 
 // Slack's own short names come from this dataset. The npm package only ships 64px images,
 // so the 160px Apple set is served from the matching tag of the dataset's repository.
+// The dependency is pinned to an exact version because that tag has to exist.
 const IMAGE_BASE = `https://cdn.jsdelivr.net/gh/iamcal/emoji-data@v${pkg.version}/img-apple-160/`;
 const SKIN_TONES = { 2: '1F3FB', 3: '1F3FC', 4: '1F3FD', 5: '1F3FE', 6: '1F3FF' };
 const TONE_BY_MODIFIER = Object.fromEntries(Object.entries(SKIN_TONES).map(([tone, code]) => [code, Number(tone)]));
@@ -36,17 +37,19 @@ function fromCharacters(text) {
 
 // `name` is a Slack short name (`thumbsup`) or the emoji character itself (`👍`).
 // `skinTone` is the N of `:skin-tone-N:` and is ignored for emoji that have no such variation.
+// A character that already carries a skin tone keeps it.
 export function resolveBuiltinEmoji(name, skinTone = null) {
   let entry = byName.get(name);
-  let variation = entry?.skin_variations?.[SKIN_TONES[skinTone]];
-  let tone = variation ? skinTone : null;
+  let tone = skinTone;
+  let variation;
   if (!entry) {
     const found = fromCharacters(name);
     if (!found) return null;
-    ({ entry, tone } = found);
-    variation = found.variation;
+    ({ entry, variation } = found);
+    if (variation) tone = found.tone;
   }
-  if (variation && !variation.has_img_apple) variation = null;
+  variation ??= entry.skin_variations?.[SKIN_TONES[tone]];
+  if (!variation?.has_img_apple) variation = null;
   return {
     // Wrapped in colons by the caller, so this yields `:+1::skin-tone-2:`.
     name: variation && tone ? `${entry.short_name}::skin-tone-${tone}` : entry.short_name,
