@@ -3,28 +3,39 @@ import { resolveBuiltinEmoji } from './builtin.js';
 const CACHE_MS = 10 * 60 * 1000;
 const MIN_REFRESH_MS = 30 * 1000;
 
-const EMOJI_CHARACTERS = /[\p{Extended_Pictographic}\p{Regional_Indicator}\u20e3]/u;
-const SKIN_TONE = /^skin-tone-([2-6])$/;
+const EMOJI_CHARACTERS = /[\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Regional_Indicator}\u20e3]/u;
+const SKIN_TONE_NAME = /^skin-tone-([1-6])$/;
+const SKIN_TONE_CHARACTER = /^[\u{1f3fb}-\u{1f3ff}]$/u;
 const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
-// Accepts `:a: :b:`, `:a::b:`, `a, b` and emoji characters (`👍`, split per emoji when run together).
-// `:skin-tone-N:` after an emoji is its skin tone; on its own it is the swatch emoji of that name.
+// The N of `:skin-tone-N:`, or of a modifier character (🏻-🏿 are tones 2-6). Null for anything else.
+function skinToneOf(token) {
+  if (SKIN_TONE_CHARACTER.test(token)) return token.codePointAt(0) - 0x1f3fb + 2;
+  const match = SKIN_TONE_NAME.exec(token);
+  return match ? Number(match[1]) : null;
+}
+
+// Emoji run together (`👍😄`) are split per emoji; a part that mixes emoji and other text stays whole.
+// Emoji characters are not lowercased: Ⓜ has a lowercase form that is no longer an emoji.
+function splitPart(part) {
+  if (!EMOJI_CHARACTERS.test(part)) return [part.toLowerCase()];
+  const segments = Array.from(graphemes.segment(part), ({ segment }) => segment);
+  return segments.every((segment) => EMOJI_CHARACTERS.test(segment)) ? segments : [part];
+}
+
+// Accepts `:a: :b:`, `:a::b:`, `a, b` and emoji characters.
+// A skin tone (`:skin-tone-N:` or 🏻-🏿) before or after an emoji is its skin tone, and the first one wins.
+// `:skin-tone-1:` is the default tone. A skin tone on its own is the swatch emoji of that name.
 export function parseEmoji(text) {
   const names = [];
-  let skinTone = null;
+  const tones = [];
   for (const part of text.split(/[\s,:]+/)) {
     if (!part) continue;
-    if (EMOJI_CHARACTERS.test(part)) {
-      // Not lowercased: Ⓜ has a lowercase form that is no longer an emoji.
-      names.push(...Array.from(graphemes.segment(part), ({ segment }) => segment));
-      continue;
-    }
-    const name = part.toLowerCase();
-    const tone = SKIN_TONE.exec(name);
-    if (tone && names.length) skinTone ??= Number(tone[1]);
-    else names.push(name);
+    for (const token of splitPart(part)) (skinToneOf(token) ? tones : names).push(token);
   }
-  return names.length ? { names, skinTone } : null;
+  if (!names.length) return tones.length ? { names: tones, skinTone: null } : null;
+  const skinTone = tones.length ? skinToneOf(tones[0]) : null;
+  return { names, skinTone: skinTone > 1 ? skinTone : null };
 }
 
 // How a parsed name is shown back to the user: `:name:`, or the character itself.
@@ -50,7 +61,7 @@ export function createEmojiCache(client) {
   let pending = null;
 
   // Concurrent lookups share one in-flight emoji.list call.
-  // On failure the previous list is kept, and the next retry waits MIN_REFRESH_MS.
+  // On failure the previous list is kept, and the next retry waits at least MIN_REFRESH_MS.
   function refresh() {
     pending ??= client.emoji
       .list()
@@ -59,7 +70,8 @@ export function createEmojiCache(client) {
         nextRefreshAt = Date.now() + CACHE_MS;
       })
       .catch((error) => {
-        nextRefreshAt = Date.now() + MIN_REFRESH_MS;
+        // A failed background refresh does not cut short a list that is still fresh.
+        nextRefreshAt = Math.max(nextRefreshAt, Date.now() + MIN_REFRESH_MS);
         if (!list) throw error;
       })
       .finally(() => {
@@ -76,15 +88,29 @@ export function createEmojiCache(client) {
         if (!list && Date.now() < nextRefreshAt) throw new Error('emoji.list retry pending');
         await refresh();
       }
-      // Refresh before falling back to a built-in emoji, so a newly added custom emoji
-      // with the same name is not shadowed until the cache expires.
-      if (!resolveEmoji(list, name) && Date.now() - lastAttemptAt > MIN_REFRESH_MS) await refresh();
     } catch (error) {
       // Built-in emoji do not need the list.
       const found = builtin(name);
       if (found) return found;
       throw error;
     }
+
+    const custom = resolveEmoji(list, name);
+    if (custom) return custom;
+    // Custom emoji cannot be named with emoji characters, so a new list cannot change those.
+    const canRefresh = !EMOJI_CHARACTERS.test(name) && Date.now() - lastAttemptAt > MIN_REFRESH_MS;
+    const found = resolveEmoji(list, name, builtin);
+    if (found) {
+      // A custom emoji of the same name may have been added since the last fetch. Waiting for
+      // emoji.list here would slow down every built-in lookup, so the list is refreshed in the
+      // background and the next lookup sees it. refresh() keeps the old list on failure, so this
+      // does not reject.
+      if (canRefresh) refresh();
+      return found;
+    }
+    // Not found anywhere: it may be a custom emoji added since the last fetch.
+    if (!canRefresh) return null;
+    await refresh();
     return resolveEmoji(list, name, builtin);
   };
 }

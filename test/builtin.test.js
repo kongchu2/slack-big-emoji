@@ -20,6 +20,25 @@ test('applies skin tones only where a variation exists', () => {
   assert.deepEqual(resolveBuiltinEmoji('smile', 2), resolveBuiltinEmoji('smile'));
 });
 
+test('applies one skin tone to both people of a two-person emoji', () => {
+  // people_holding_hands keys the tone as `1F3FC-1F3FC`, handshake as `1F3FC`.
+  const holding = resolveBuiltinEmoji('people_holding_hands', 3);
+  assert.equal(image(holding), '1f9d1-1f3fc-200d-1f91d-200d-1f9d1-1f3fc.png');
+  assert.equal(holding.name, 'people_holding_hands::skin-tone-3');
+  assert.equal(image(resolveBuiltinEmoji('handshake', 3)), '1f91d-1f3fc.png');
+  // The same emoji as a character keeps its tone in the name.
+  const character = String.fromCodePoint(0x1f9d1, 0x1f3fc, 0x200d, 0x1f91d, 0x200d, 0x1f9d1, 0x1f3fc);
+  assert.deepEqual(resolveBuiltinEmoji(character), holding);
+  // Mixed tones have no `:skin-tone-N:`.
+  const mixed = String.fromCodePoint(0x1f9d1, 0x1f3fb, 0x200d, 0x1f91d, 0x200d, 0x1f9d1, 0x1f3fc);
+  assert.equal(resolveBuiltinEmoji(mixed).name, 'people_holding_hands');
+});
+
+test('resolves the skin tone swatches', () => {
+  assert.equal(resolveBuiltinEmoji('skin-tone-2').name, 'skin-tone-2');
+  assert.equal(resolveBuiltinEmoji('🏻').name, 'skin-tone-2');
+});
+
 test('resolves emoji characters', () => {
   assert.equal(resolveBuiltinEmoji('😄').name, 'smile');
   assert.equal(resolveBuiltinEmoji('👍🏻').name, '+1::skin-tone-2');

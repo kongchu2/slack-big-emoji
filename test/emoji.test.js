@@ -25,10 +25,24 @@ test('parseEmoji skin tones', () => {
   assert.deepEqual(parseEmoji(':THUMBSUP::SKIN-TONE-2:'), { names: ['thumbsup'], skinTone: 2 });
   assert.deepEqual(parseEmoji('👍 :skin-tone-3:'), { names: ['👍'], skinTone: 3 });
   assert.deepEqual(parseEmoji('👍:skin-tone-3:'), { names: ['👍'], skinTone: 3 });
-  // Not a tone: other names, out of range, or nothing before it to modify.
+  // Before the emoji, too.
+  assert.deepEqual(parseEmoji(':skin-tone-2::thumbsup:'), { names: ['thumbsup'], skinTone: 2 });
+  // The first tone wins, and tone 1 is the default.
+  assert.equal(parseEmoji(':a::skin-tone-4::skin-tone-5:').skinTone, 4);
+  assert.deepEqual(parseEmoji(':a::skin-tone-1:'), { names: ['a'], skinTone: null });
+  // Not a tone: other names or out of range.
   assert.deepEqual(parseEmoji(':a: :my-skin-tone-2:'), { names: ['a', 'my-skin-tone-2'], skinTone: null });
   assert.deepEqual(parseEmoji(':a::skin-tone-7:'), { names: ['a', 'skin-tone-7'], skinTone: null });
+  // On its own, a tone is the swatch emoji.
   assert.deepEqual(parseEmoji(':skin-tone-2:'), { names: ['skin-tone-2'], skinTone: null });
+});
+
+test('parseEmoji skin tone characters', () => {
+  assert.deepEqual(parseEmoji('👍 🏻'), { names: ['👍'], skinTone: 2 });
+  assert.deepEqual(parseEmoji('🏿👍'), { names: ['👍'], skinTone: 6 });
+  assert.deepEqual(parseEmoji(':thumbsup: 🏼'), { names: ['thumbsup'], skinTone: 3 });
+  assert.deepEqual(parseEmoji('🏻'), { names: ['🏻'], skinTone: null });
+  assert.equal(displayName('🏻'), '🏻');
 });
 
 test('parseEmoji emoji characters', () => {
@@ -37,6 +51,9 @@ test('parseEmoji emoji characters', () => {
   assert.deepEqual(names('👍🏻'), ['👍🏻']);
   assert.deepEqual(names('🇰🇷'), ['🇰🇷']);
   assert.deepEqual(names('\u24c2\ufe0f'), ['\u24c2\ufe0f']);
+  // Emoji mixed with other text stay one name, which is then not found.
+  assert.deepEqual(names('😄hi'), ['😄hi']);
+  assert.deepEqual(names('Hi😄 :b:'), ['Hi😄', 'b']);
   assert.equal(displayName('😄'), '😄');
   assert.equal(displayName('smile'), ':smile:');
 });

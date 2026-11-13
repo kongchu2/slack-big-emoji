@@ -151,7 +151,8 @@ app.command(command, async ({ command: cmd, ack, respond }) => {
     return respond({
       response_type: 'ephemeral',
       // In a code span, so Slack does not render the name as an emoji or as markdown.
-      text: `Could not find \`${displayName(names[0])}\`.`,
+      // A Slack code span cannot contain a backtick, so it is swapped for a lookalike.
+      text: `Could not find \`${displayName(names[0]).replaceAll('`', 'ˋ')}\`.`,
     });
   }
 

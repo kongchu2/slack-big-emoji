@@ -6,7 +6,11 @@ import pkg from 'emoji-datasource/package.json' with { type: 'json' };
 // The dependency is pinned to an exact version because that tag has to exist.
 const IMAGE_BASE = `https://cdn.jsdelivr.net/gh/iamcal/emoji-data@v${pkg.version}/img-apple-160/`;
 const SKIN_TONES = { 2: '1F3FB', 3: '1F3FC', 4: '1F3FD', 5: '1F3FE', 6: '1F3FF' };
-const TONE_BY_MODIFIER = Object.fromEntries(Object.entries(SKIN_TONES).map(([tone, code]) => [code, Number(tone)]));
+// Some emoji of two people (people_holding_hands) key one tone for both as `1F3FC-1F3FC`.
+const toneKeys = (code) => [code, `${code}-${code}`];
+const TONE_BY_MODIFIER = Object.fromEntries(
+  Object.entries(SKIN_TONES).flatMap(([tone, code]) => toneKeys(code).map((key) => [key, Number(tone)])),
+);
 
 const byName = new Map();
 const byUnified = new Map();
@@ -48,7 +52,9 @@ export function resolveBuiltinEmoji(name, skinTone = null) {
     ({ entry, variation } = found);
     if (variation) tone = found.tone;
   }
-  variation ??= entry.skin_variations?.[SKIN_TONES[tone]];
+  if (!variation && SKIN_TONES[tone] && entry.skin_variations) {
+    variation = toneKeys(SKIN_TONES[tone]).map((key) => entry.skin_variations[key]).find(Boolean);
+  }
   if (!variation?.has_img_apple) variation = null;
   return {
     // Wrapped in colons by the caller, so this yields `:+1::skin-tone-2:`.
