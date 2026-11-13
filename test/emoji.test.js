@@ -37,6 +37,13 @@ test('parseEmoji skin tones', () => {
   assert.deepEqual(parseEmoji(':skin-tone-2:'), { names: ['skin-tone-2'], skinTone: null });
 });
 
+test('parseEmoji skin tones of two people', () => {
+  assert.deepEqual(parseEmoji(':people_holding_hands::skin-tone-3-3:'), { names: ['people_holding_hands'], skinTone: 3 });
+  assert.deepEqual(parseEmoji(':women_holding_hands::skin-tone-2-6:'), { names: ['women_holding_hands'], skinTone: '2-6' });
+  assert.deepEqual(parseEmoji(':a::skin-tone-1-1:'), { names: ['a'], skinTone: null });
+  assert.deepEqual(parseEmoji(':a::skin-tone-2-7:'), { names: ['a', 'skin-tone-2-7'], skinTone: null });
+});
+
 test('parseEmoji skin tone characters', () => {
   assert.deepEqual(parseEmoji('👍 🏻'), { names: ['👍'], skinTone: 2 });
   assert.deepEqual(parseEmoji('🏿👍'), { names: ['👍'], skinTone: 6 });

@@ -4,15 +4,18 @@ const CACHE_MS = 10 * 60 * 1000;
 const MIN_REFRESH_MS = 30 * 1000;
 
 const EMOJI_CHARACTERS = /[\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Regional_Indicator}\u20e3]/u;
-const SKIN_TONE_NAME = /^skin-tone-([1-6])$/;
+const SKIN_TONE_NAME = /^skin-tone-([1-6])(?:-([1-6]))?$/;
 const SKIN_TONE_CHARACTER = /^[\u{1f3fb}-\u{1f3ff}]$/u;
 const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
-// The N of `:skin-tone-N:`, or of a modifier character (🏻-🏿 are tones 2-6). Null for anything else.
+// The N of `:skin-tone-N:` or of a modifier character (🏻-🏿 are tones 2-6). Emoji of two people take
+// `:skin-tone-N-M:`, which is N when both tones match and `'N-M'` otherwise. Null for anything else.
 function skinToneOf(token) {
   if (SKIN_TONE_CHARACTER.test(token)) return token.codePointAt(0) - 0x1f3fb + 2;
   const match = SKIN_TONE_NAME.exec(token);
-  return match ? Number(match[1]) : null;
+  if (!match) return null;
+  const [, first, second = first] = match;
+  return first === second ? Number(first) : `${first}-${second}`;
 }
 
 // Emoji run together (`👍😄`) are split per emoji; a part that mixes emoji and other text stays whole.
@@ -24,8 +27,9 @@ function splitPart(part) {
 }
 
 // Accepts `:a: :b:`, `:a::b:`, `a, b` and emoji characters.
-// A skin tone (`:skin-tone-N:` or 🏻-🏿) before or after an emoji is its skin tone, and the first one wins.
-// `:skin-tone-1:` is the default tone. A skin tone on its own is the swatch emoji of that name.
+// A skin tone (`:skin-tone-N:`, `:skin-tone-N-M:` or 🏻-🏿) before or after an emoji is its skin tone,
+// and the first one wins. `:skin-tone-1:` is the default tone. A skin tone on its own is the swatch
+// emoji of that name.
 export function parseEmoji(text) {
   const names = [];
   const tones = [];
@@ -35,7 +39,7 @@ export function parseEmoji(text) {
   }
   if (!names.length) return tones.length ? { names: tones, skinTone: null } : null;
   const skinTone = tones.length ? skinToneOf(tones[0]) : null;
-  return { names, skinTone: skinTone > 1 ? skinTone : null };
+  return { names, skinTone: skinTone === 1 ? null : skinTone };
 }
 
 // How a parsed name is shown back to the user: `:name:`, or the character itself.
